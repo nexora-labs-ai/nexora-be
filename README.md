@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🚀 Nexora Backend
+# 🚀 Nexora Backend.
 
 **Enterprise-grade expense sharing & trip planning API**
 
