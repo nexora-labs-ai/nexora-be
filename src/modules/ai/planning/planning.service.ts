@@ -1,0 +1,104 @@
+import { Injectable, Inject, Logger } from '@nestjs/common';
+import { AI_PORT, AiPort } from '../../../shared/infrastructure/ports/ai.port';
+import { PrismaService } from '../../../shared/database/prisma.service';
+import { ItineraryStatus } from '@prisma/client';
+import { NotificationType } from '@prisma/client';
+import { RealtimeService } from '../../../shared/realtime/realtime.service';
+import { REALTIME_EVENTS } from '../../../shared/realtime/realtime.gateway';
+
+@Injectable()
+export class PlanningService {
+  private readonly logger = new Logger(PlanningService.name);
+
+  constructor(
+    @Inject(AI_PORT) private readonly aiPort: AiPort,
+    private readonly prisma: PrismaService,
+    private readonly realtimeService: RealtimeService,
+  ) {}
+
+  async generateItinerary(params: {
+    groupId: string;
+    destination: string;
+    duration: number;
+    budget?: number;
+    interests?: string[];
+    requestedBy: string;
+  }): Promise<void> {
+    const prompt = `
+Generate a detailed ${params.duration}-day travel itinerary for ${params.destination}.
+
+Group preferences:
+- Duration: ${params.duration} days
+- Budget: ${params.budget ? `$${params.budget}` : 'flexible'}
+- Interests: ${params.interests?.join(', ') ?? 'general tourism'}
+
+Return as JSON:
+{
+  "title": "Itinerary title",
+  "description": "Overview",
+  "items": [
+    {
+      "day": 1,
+      "order": 1,
+      "title": "Activity title",
+      "description": "Details",
+      "location": "Place name",
+      "startTime": "09:00",
+      "endTime": "11:00",
+      "estimatedCost": 50
+    }
+  ]
+}`;
+
+    const response = await this.aiPort.complete({ userPrompt: prompt, temperature: 0.7 });
+
+    let plan: {
+      title: string;
+      description: string;
+      items: Array<{
+        day: number;
+        order: number;
+        title: string;
+        description: string;
+        location: string;
+        estimatedCost?: number;
+      }>;
+    };
+
+    try {
+      plan = JSON.parse(response.content);
+    } catch {
+      this.logger.error('Failed to parse AI itinerary response');
+      return;
+    }
+
+    await this.prisma.itinerary.create({
+      data: {
+        groupId: params.groupId,
+        title: plan.title,
+        description: plan.description,
+        destination: params.destination,
+        status: ItineraryStatus.DRAFT,
+        aiGenerated: true,
+        items: {
+          createMany: {
+            data: plan.items.map((item) => ({
+              title: item.title,
+              description: item.description,
+              location: item.location,
+              estimatedCost: item.estimatedCost,
+              order: item.order + (item.day - 1) * 100,
+            })),
+          },
+        },
+      },
+    });
+
+    // Notify the group
+    this.realtimeService.emitToGroup(
+      params.groupId,
+      REALTIME_EVENTS.ITINERARY_READY,
+      { groupId: params.groupId, destination: params.destination },
+    );
+  }
+}

@@ -1,0 +1,72 @@
+version: '3.9'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    ports:
+      - '3000:3000'
+    environment:
+      - NODE_ENV=production
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - nexora-network
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://localhost:3000/api/health/live']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: nexora_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - nexora-network
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --save 60 1 --loglevel warning
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    networks:
+      - nexora-network
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Bull Board for queue monitoring (dev only)
+  # Access at http://localhost:3000/admin/queues
+  # Secured by BULL_BOARD_USERNAME and BULL_BOARD_PASSWORD env vars
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  nexora-network:
+    driver: bridge

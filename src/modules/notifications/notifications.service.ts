@@ -1,0 +1,100 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
+import { NotificationType } from '@prisma/client';
+import { NotificationsRepository } from './notifications.repository';
+import { RealtimeService } from '../../shared/realtime/realtime.service';
+import { ExpenseCreatedEvent, EXPENSE_EVENTS } from '../expenses/domain/expense.events';
+import { SETTLEMENT_EVENTS } from '../settlements/settlements.service';
+import { GROUP_EVENTS, MemberAddedEvent } from '../groups/domain/group.events';
+import { QUEUES, JOB_NAMES } from '../../shared/queue/queue.constants';
+
+@Injectable()
+export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
+
+  constructor(
+    private readonly notificationsRepository: NotificationsRepository,
+    private readonly realtimeService: RealtimeService,
+    @InjectQueue(QUEUES.NOTIFICATIONS) private readonly notificationsQueue: Queue,
+  ) {}
+
+  async getUserNotifications(userId: string, page: number, limit: number) {
+    return this.notificationsRepository.findUserNotifications(userId, page, limit);
+  }
+
+  async markAsRead(notificationId: string, userId: string) {
+    return this.notificationsRepository.markAsRead(notificationId, userId);
+  }
+
+  async markAllAsRead(userId: string) {
+    return this.notificationsRepository.markAllAsRead(userId);
+  }
+
+  async getUnreadCount(userId: string) {
+    return this.notificationsRepository.getUnreadCount(userId);
+  }
+
+  async sendToUser(data: {
+    userId: string;
+    groupId?: string;
+    type: NotificationType;
+    title: string;
+    body: string;
+    payload?: Record<string, unknown>;
+  }) {
+    const notification = await this.notificationsRepository.create({
+      userId: data.userId,
+      groupId: data.groupId,
+      type: data.type,
+      title: data.title,
+      body: data.body,
+      data: data.payload,
+    });
+
+    // Push realtime notification
+    this.realtimeService.notifyUser(data.userId, notification);
+
+    return notification;
+  }
+
+  // ============================================================
+  // Domain Event Listeners
+  // ============================================================
+
+  @OnEvent(EXPENSE_EVENTS.CREATED)
+  async onExpenseCreated(event: ExpenseCreatedEvent) {
+    // Queue notification job for split participants
+    await this.notificationsQueue.add(JOB_NAMES.SEND_BULK_NOTIFICATIONS, {
+      type: NotificationType.EXPENSE_CREATED,
+      userIds: event.splitUserIds.filter((id) => id !== event.payerId),
+      title: 'New expense added',
+      body: `A new expense of ${event.currency} ${event.amount} was added to your group`,
+      groupId: event.groupId,
+    });
+  }
+
+  @OnEvent(SETTLEMENT_EVENTS.COMPLETED)
+  async onSettlementCompleted(event: unknown) {
+    const settlement = event as { toUserId: string; fromUserId: string; groupId: string; amount: number; currency: string };
+    await this.sendToUser({
+      userId: settlement.fromUserId,
+      groupId: settlement.groupId,
+      type: NotificationType.SETTLEMENT_COMPLETED,
+      title: 'Settlement confirmed',
+      body: `Your payment of ${settlement.currency} ${settlement.amount} has been confirmed`,
+    });
+  }
+
+  @OnEvent(GROUP_EVENTS.MEMBER_ADDED)
+  async onMemberAdded(event: MemberAddedEvent) {
+    await this.sendToUser({
+      userId: event.addedUserId,
+      groupId: event.groupId,
+      type: NotificationType.GROUP_INVITE,
+      title: 'You were added to a group',
+      body: 'You have been added to a new group',
+    });
+  }
+}
