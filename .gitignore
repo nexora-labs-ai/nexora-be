@@ -120,3 +120,6 @@ dist
 prisma/migrations/*.sql
 prisma/**/*.db
 dist/
+
+# Ignore package-lock.json
+package-lock.json
