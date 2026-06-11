@@ -6,6 +6,7 @@
 
 [![NestJS](https://img.shields.io/badge/NestJS-v10-E0234E?style=flat&logo=nestjs)](https://nestjs.com)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3-3178C6?style=flat&logo=typescript)](https://www.typescriptlang.org)
+[![Biome](https://img.shields.io/badge/Biome-Lint%20%26%20Format-60A5FA?style=flat)](https://biomejs.dev)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?style=flat&logo=postgresql)](https://www.postgresql.org)
 [![Redis](https://img.shields.io/badge/Redis-7-DC382D?style=flat&logo=redis)](https://redis.io)
 [![License](https://img.shields.io/badge/License-UNLICENSED-lightgrey?style=flat)](LICENSE)
@@ -99,14 +100,17 @@ src/
 | AI | OpenAI GPT-4 |
 | Storage | AWS S3 |
 | Logging | Winston, winston-daily-rotate-file |
-| Validation | class-validator, class-transformer |
+| Validation | class-validator, class-transformer, Zod (env fail-fast) |
+| Lint/Format | Biome |
+| Git Hooks | Lefthook |
+| CI/CD | GitHub Actions |
 | Docs | Swagger / OpenAPI |
 
 ---
 
 ## ⚙️ Yêu cầu hệ thống
 
-- **Node.js** ≥ 20
+- **Node.js** 22 LTS (khuyến nghị, đồng bộ với CI/Docker)
 - **npm** ≥ 10
 - **Docker & Docker Compose** (khuyến nghị cho local dev)
 - **PostgreSQL** 16 (hoặc dùng Docker)
@@ -124,6 +128,8 @@ cd nexora-be
 npm install
 ```
 
+`npm install` sẽ tự chạy `prepare` để cài Lefthook hook scripts.
+
 ### 2. Cấu hình biến môi trường
 
 ```bash
@@ -140,7 +146,8 @@ DATABASE_URL="postgresql://postgres:password@localhost:5432/nexora_dev?schema=pu
 REDIS_HOST=localhost
 REDIS_PORT=6379
 
-# JWT (bắt buộc thay đổi trong production)
+# JWT (bắt buộc, dùng cho env validation)
+JWT_SECRET=your-super-secret-jwt-key-min-32-chars
 JWT_ACCESS_SECRET=your-super-secret-access-key-min-32-chars
 JWT_REFRESH_SECRET=your-super-secret-refresh-key-min-32-chars
 
@@ -156,6 +163,14 @@ AWS_ACCESS_KEY_ID=...
 AWS_SECRET_ACCESS_KEY=...
 AWS_S3_BUCKET=nexora-uploads
 ```
+
+Biến môi trường được validate ở startup bằng Zod. Thiếu hoặc sai định dạng các biến bắt buộc sẽ làm app dừng ngay (fail-fast):
+
+- `DATABASE_URL`
+- `JWT_SECRET`
+- `PORT`
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
 
 ### 3. Khởi động với Docker Compose (khuyến nghị)
 
@@ -209,7 +224,8 @@ npm run start:dev
 
 ```bash
 # Development
-npm run start:dev          # Chạy với hot-reload
+npm run dev                # Chạy với hot-reload
+npm run start:dev          # Alias của dev
 npm run start:debug        # Chạy với debug mode
 
 # Build & Production
@@ -231,9 +247,60 @@ npm run test:cov           # Test với coverage report
 npm run test:e2e           # End-to-end tests
 
 # Code quality
-npm run lint               # ESLint + auto-fix
-npm run format             # Prettier format
+npm run lint               # Biome lint
+npm run format             # Biome format --write
+npm run check              # Biome check (lint + format + imports)
 ```
+
+---
+
+## ✅ Code Quality Workflow
+
+### Biome (single source of truth)
+
+Project dùng **Biome** làm formatter + linter duy nhất (không dùng ESLint/Prettier).
+
+File cấu hình: `biome.json`
+
+### Lefthook
+
+File cấu hình: `lefthook.yml`
+
+- `pre-commit`: `npx biome check --write .`
+- `pre-push`: `npm run build`
+
+Nếu build fail ở `pre-push`, git push sẽ bị chặn.
+
+### TypeScript strict mode
+
+`tsconfig.json` đã bật strict mode và các rule production-grade như:
+
+- `strict`
+- `noUncheckedIndexedAccess`
+- `noImplicitReturns`
+- `noImplicitOverride`
+- `forceConsistentCasingInFileNames`
+
+---
+
+## 🔄 CI Pipeline (GitHub Actions)
+
+Workflow: `.github/workflows/ci.yml`
+
+Trigger:
+
+- `push`
+- `pull_request`
+
+Các bước chạy tự động:
+
+1. `npm ci`
+2. `npx biome check .`
+3. `npm run build`
+4. `npm run test -- --runInBand`
+5. `docker build -t nexora-be:ci .`
+
+Bất kỳ bước nào fail sẽ fail toàn bộ pipeline.
 
 ---
 
@@ -318,6 +385,13 @@ docker build -t nexora-be:latest .
 docker run -p 3000:3000 --env-file .env nexora-be:latest
 ```
 
+Dockerfile sử dụng **multi-stage build** để:
+
+- tách build-time dependencies và runtime image
+- giảm kích thước image
+- chạy process bằng non-root user
+- hỗ trợ healthcheck endpoint
+
 ---
 
 ## 🔄 Chiến lược phát triển
@@ -342,6 +416,11 @@ Stage 5: Microservices (khi cần scale tổ chức)
 
 ```
 nexora-be/
+├── .github/
+│   └── workflows/
+│       └── ci.yml            # CI: biome, build, test, docker build
+├── biome.json                # Biome formatter/linter config
+├── lefthook.yml              # Git hooks: pre-commit/pre-push
 ├── src/
 ├── prisma/
 │   ├── schema.prisma          # Database schema
@@ -353,6 +432,7 @@ nexora-be/
 ├── .env                       # Biến môi trường (gitignored)
 ├── docker-compose.yml         # Docker Compose config
 ├── Dockerfile                 # Multi-stage production build
+├── .dockerignore
 ├── nest-cli.json
 ├── tsconfig.json
 ├── tsconfig.build.json

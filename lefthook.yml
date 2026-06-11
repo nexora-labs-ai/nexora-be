@@ -1,0 +1,11 @@
+pre-commit:
+  parallel: false
+  commands:
+    biome:
+      run: npx biome check --write .
+
+pre-push:
+  parallel: false
+  commands:
+    build:
+      run: npm run build

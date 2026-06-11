@@ -1,42 +1,37 @@
-# ---- Build Stage ----
-FROM node:20-alpine AS builder
-
+FROM node:22-alpine AS base
 WORKDIR /app
 
+FROM base AS deps
 COPY package*.json ./
-COPY prisma ./prisma/
+RUN npm ci
 
-RUN npm ci --only=production && npm cache clean --force
-
-COPY . .
-
+FROM deps AS build
+COPY tsconfig*.json nest-cli.json ./
+COPY prisma ./prisma
+COPY src ./src
 RUN npm run db:generate
 RUN npm run build
+RUN npm prune --omit=dev
 
-# ---- Production Stage ----
-FROM node:20-alpine AS production
-
+FROM node:22-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
 
-# Install dumb-init for proper PID 1 handling
 RUN apk add --no-cache dumb-init
 
-# Copy production node_modules and build
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./
-COPY --from=builder /app/prisma ./prisma
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/prisma ./prisma
+COPY --from=build /app/package*.json ./
 
-# Security: run as non-root
-RUN addgroup -g 1001 -S nodejs && adduser -S nestjs -u 1001
+RUN addgroup -S nestjs && adduser -S nestjs -G nestjs
 USER nestjs
 
 EXPOSE 3000
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health/live || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:3000/api/health/live').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 ENTRYPOINT ["dumb-init", "--"]
 CMD ["node", "dist/main"]

@@ -11,6 +11,7 @@ import redisConfig from './shared/config/redis.config';
 import jwtConfig from './shared/config/jwt.config';
 import awsConfig from './shared/config/aws.config';
 import openaiConfig from './shared/config/openai.config';
+import { validateEnv } from './shared/config/env.validation';
 
 import { PrismaModule } from './shared/database/prisma.module';
 import { CacheModule } from './shared/infrastructure/cache/cache.module';
@@ -40,6 +41,7 @@ import { AiModule } from './modules/ai/ai.module';
       load: [appConfig, databaseConfig, redisConfig, jwtConfig, awsConfig, openaiConfig],
       envFilePath: ['.env.local', '.env'],
       cache: true,
+      validate: validateEnv,
     }),
 
     // Structured logging (global)
