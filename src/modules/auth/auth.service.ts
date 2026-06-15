@@ -60,11 +60,13 @@ export class AuthService {
 
   async validateLocalUser(email: string, password: string) {
     const user = await this.usersService.findByEmail(email);
-    if (!user || !user.passwordHash) {
+    const localAccount = user?.accounts?.find((a) => a.provider === AuthProvider.LOCAL);
+    
+    if (!user || !localAccount || !localAccount.passwordHash) {
       throw new UnauthorizedError('Invalid credentials');
     }
 
-    const isValid = await bcrypt.compare(password, user.passwordHash);
+    const isValid = await bcrypt.compare(password, localAccount.passwordHash);
     if (!isValid) {
       throw new UnauthorizedError('Invalid credentials');
     }
