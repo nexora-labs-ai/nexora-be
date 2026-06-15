@@ -10,8 +10,8 @@ export class SettlementsRepository {
     return this.prisma.settlement.findUnique({
       where: { id },
       include: {
-        fromUser: { select: { id: true, displayName: true, avatarUrl: true } },
-        toUser: { select: { id: true, displayName: true, avatarUrl: true } },
+        fromUser: { select: { id: true, profile: { select: { displayName: true, avatarUrl: true } } } },
+        toUser: { select: { id: true, profile: { select: { displayName: true, avatarUrl: true } } } },
       },
     });
   }
@@ -20,8 +20,8 @@ export class SettlementsRepository {
     return this.prisma.settlement.findMany({
       where: { groupId },
       include: {
-        fromUser: { select: { id: true, displayName: true } },
-        toUser: { select: { id: true, displayName: true } },
+        fromUser: { select: { id: true, profile: { select: { displayName: true } } } },
+        toUser: { select: { id: true, profile: { select: { displayName: true } } } },
       },
       orderBy: { createdAt: 'desc' },
     });

@@ -80,22 +80,20 @@ enum AuditAction {
 // ============================================================
 
 model User {
-  id             String       @id @default(uuid())
-  email          String       @unique
-  username       String       @unique
-  displayName    String
-  avatarUrl      String?
-  role           UserRole     @default(USER)
-  provider       AuthProvider @default(LOCAL)
-  providerId     String?
-  passwordHash   String?
-  isActive       Boolean      @default(true)
-  isEmailVerified Boolean     @default(false)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  deletedAt      DateTime?
+  id              String       @id @default(uuid())
+  email           String       @unique
+  username        String       @unique
+  role            UserRole     @default(USER)
+  isActive        Boolean      @default(true)
+  isEmailVerified Boolean      @default(false)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  deletedAt       DateTime?
 
   // Relations
+  profile          UserProfile?
+  settings         UserSettings?
+  accounts         UserAccount[]
   refreshTokens    RefreshToken[]
   groupMemberships GroupMember[]
   expensesPaid     Expense[]       @relation("ExpensePayer")
@@ -109,6 +107,46 @@ model User {
   @@map("users")
   @@index([email])
   @@index([username])
+}
+
+model UserProfile {
+  id          String  @id @default(uuid())
+  userId      String  @unique
+  displayName String
+  avatarUrl   String?
+  phoneNumber String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
+model UserSettings {
+  id                      String  @id @default(uuid())
+  userId                  String  @unique
+  defaultCurrency         String  @default("VND")
+  notificationPreferences Json?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_settings")
+}
+
+model UserAccount {
+  id                String       @id @default(uuid())
+  userId            String
+  provider          AuthProvider
+  providerAccountId String?
+  passwordHash      String?
+  accessToken       String?
+  refreshToken      String?
+  expiresAt         Int?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("user_accounts")
+  @@index([userId])
 }
 
 model RefreshToken {

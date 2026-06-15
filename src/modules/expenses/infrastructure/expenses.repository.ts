@@ -38,8 +38,8 @@ export class ExpensesRepository {
       this.prisma.expense.findMany({
         where,
         include: {
-          payer: { select: { id: true, displayName: true, avatarUrl: true } },
-          splits: { include: { user: { select: { id: true, displayName: true } } } },
+          payer: { select: { id: true, profile: { select: { displayName: true, avatarUrl: true } } } },
+          splits: { include: { user: { select: { id: true, profile: { select: { displayName: true } } } } } },
           category: true,
         },
         orderBy: { date: 'desc' },
@@ -105,9 +105,10 @@ export class ExpensesRepository {
     return this.prisma.$queryRaw<{ userId: string; balance: number }[]>`
       SELECT
         u.id as "userId",
-        u."displayName",
+        up."displayName",
         COALESCE(paid.total, 0) - COALESCE(owed.total, 0) as balance
       FROM users u
+      LEFT JOIN user_profiles up ON up."userId" = u.id
       JOIN group_members gm ON gm."userId" = u.id AND gm."groupId" = ${groupId}
       LEFT JOIN (
         SELECT "payerId", SUM(amount) as total
