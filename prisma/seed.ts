@@ -1,7 +1,7 @@
-import { PrismaClient } from '@prisma/client';
-import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
+import { PrismaClient } from '@prisma/client';
 import * as dotenv from 'dotenv';
+import { Pool } from 'pg';
 
 dotenv.config();
 
@@ -27,7 +27,7 @@ async function main() {
 
   for (const category of categories) {
     const existing = await prisma.category.findFirst({
-      where: { name: category.name }
+      where: { name: category.name },
     });
     if (!existing) {
       await prisma.category.create({
