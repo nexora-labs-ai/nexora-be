@@ -54,3 +54,4 @@ Thumbs.db
 
 # Prisma local DB artifacts
 prisma/**/*.db
+package-lock.json
