@@ -1,10 +1,10 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
-import { AI_PORT, AiPort } from '../../../shared/infrastructure/ports/ai.port';
-import { PrismaService } from '../../../shared/database/prisma.service';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ItineraryStatus } from '@prisma/client';
 import { NotificationType } from '@prisma/client';
-import { RealtimeService } from '../../../shared/realtime/realtime.service';
+import { PrismaService } from '../../../shared/database/prisma.service';
+import { AI_PORT, AiPort } from '../../../shared/infrastructure/ports/ai.port';
 import { REALTIME_EVENTS } from '../../../shared/realtime/realtime.gateway';
+import { RealtimeService } from '../../../shared/realtime/realtime.service';
 
 @Injectable()
 export class PlanningService {
@@ -79,7 +79,7 @@ Return as JSON:
         description: plan.description,
         destination: params.destination,
         status: ItineraryStatus.DRAFT,
-        aiGenerated: true,
+        createdBy: params.requestedBy,
         items: {
           createMany: {
             data: plan.items.map((item) => ({
@@ -87,7 +87,7 @@ Return as JSON:
               description: item.description,
               location: item.location,
               estimatedCost: item.estimatedCost,
-              order: item.order + (item.day - 1) * 100,
+              orderNo: item.order + (item.day - 1) * 100,
             })),
           },
         },
@@ -95,10 +95,9 @@ Return as JSON:
     });
 
     // Notify the group
-    this.realtimeService.emitToGroup(
-      params.groupId,
-      REALTIME_EVENTS.ITINERARY_READY,
-      { groupId: params.groupId, destination: params.destination },
-    );
+    this.realtimeService.emitToGroup(params.groupId, REALTIME_EVENTS.ITINERARY_READY, {
+      groupId: params.groupId,
+      destination: params.destination,
+    });
   }
 }

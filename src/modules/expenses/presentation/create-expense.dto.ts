@@ -1,19 +1,19 @@
-import {
-  IsString,
-  IsNumber,
-  IsOptional,
-  IsEnum,
-  IsUUID,
-  IsISO4217CurrencyCode,
-  IsArray,
-  ValidateNested,
-  IsDateString,
-  Min,
-  MaxLength,
-} from 'class-validator';
-import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ExpenseSplitType } from '@prisma/client';
+import { Type } from 'class-transformer';
+import {
+  IsArray,
+  IsDateString,
+  IsEnum,
+  IsISO4217CurrencyCode,
+  IsNumber,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 
 export class SplitParticipantDto {
   @ApiProperty()
@@ -65,7 +65,7 @@ export class CreateExpenseDto {
   @IsISO4217CurrencyCode()
   currency?: string;
 
-  @ApiProperty({ enum: ExpenseSplitType, example: ExpenseSplitType.EQUAL })
+  @ApiProperty({ enum: ExpenseSplitType, example: ExpenseSplitType.SHARES })
   @IsEnum(ExpenseSplitType)
   splitType: ExpenseSplitType;
 

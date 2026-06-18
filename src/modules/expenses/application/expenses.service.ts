@@ -1,14 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ExpenseSplitType } from '@prisma/client';
-import { ExpensesRepository } from '../infrastructure/expenses.repository';
-import { GroupsService } from '../../groups/application/groups.service';
-import { ExpenseSplitter } from '../domain/expense-splitter';
-import { EXPENSE_EVENTS, ExpenseCreatedEvent } from '../domain/expense.events';
+import { ForbiddenError, NotFoundError } from '../../../shared/common/domain-errors';
 import { Money } from '../../../shared/common/value-objects/money';
 import { CacheService } from '../../../shared/infrastructure/cache/cache.service';
 import { RealtimeService } from '../../../shared/realtime/realtime.service';
-import { NotFoundError, ForbiddenError } from '../../../shared/common/domain-errors';
+import { GroupsService } from '../../groups/application/groups.service';
+import { ExpenseSplitter } from '../domain/expense-splitter';
+import { EXPENSE_EVENTS, ExpenseCreatedEvent } from '../domain/expense.events';
+import { ExpensesRepository } from '../infrastructure/expenses.repository';
 import { CreateExpenseDto } from '../presentation/create-expense.dto';
 
 @Injectable()
@@ -45,7 +45,7 @@ export class ExpensesService {
     if (!expense) throw new NotFoundError('Expense', id);
 
     // Verify membership
-    await this.groupsService.getGroup(expense.groupId, requestingUserId);
+    await this.groupsService.getGroup(expense.groupId!, requestingUserId);
     return expense;
   }
 
@@ -58,13 +58,13 @@ export class ExpensesService {
     // Determine splits
     let splits: { userId: string; amount: number; percentage?: number; shares?: number }[];
 
-    if (dto.splitType === ExpenseSplitType.EQUAL && !dto.splits?.length) {
-      // Auto-split equally among all members
+    if (dto.splitType === ExpenseSplitType.SHARES && !dto.splits?.length) {
+      // Auto-split equally among all members by giving 1 share
       const group = await this.groupsService.getGroup(dto.groupId, payerId);
       const participants = (group as unknown as { members: { userId: string }[] }).members.map(
-        (m) => ({ userId: m.userId }),
+        (m) => ({ userId: m.userId, shares: 1 }),
       );
-      splits = ExpenseSplitter.split(total, participants, ExpenseSplitType.EQUAL);
+      splits = ExpenseSplitter.split(total, participants, ExpenseSplitType.SHARES);
     } else {
       const participants = dto.splits ?? [];
       splits = ExpenseSplitter.split(total, participants, dto.splitType);
@@ -73,7 +73,7 @@ export class ExpensesService {
     const expense = await this.expensesRepository.create(
       {
         groupId: dto.groupId,
-        payerId,
+        createdBy: payerId,
         title: dto.title,
         description: dto.description,
         amount: dto.amount,
@@ -111,9 +111,9 @@ export class ExpensesService {
     const expense = await this.expensesRepository.findById(id);
     if (!expense) throw new NotFoundError('Expense', id);
 
-    // Only payer can delete
-    if (expense.payerId !== requestingUserId) {
-      const group = await this.groupsService.getGroup(expense.groupId, requestingUserId);
+    // Only creator can delete
+    if (expense.createdBy !== requestingUserId) {
+      const group = await this.groupsService.getGroup(expense.groupId!, requestingUserId);
       const members = (group as unknown as { members: { userId: string; role: string }[] }).members;
       const isAdmin = members.some(
         (m) => m.userId === requestingUserId && ['OWNER', 'ADMIN'].includes(m.role),
@@ -122,7 +122,7 @@ export class ExpensesService {
     }
 
     await this.expensesRepository.softDelete(id);
-    await this.cacheService.del(CacheService.keys.groupExpenses(expense.groupId));
+    await this.cacheService.del(CacheService.keys.groupExpenses(expense.groupId!));
   }
 
   async getGroupBalance(groupId: string, requestingUserId: string) {

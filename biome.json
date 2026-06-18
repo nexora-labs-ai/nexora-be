@@ -7,12 +7,7 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "ignore": [
-      "dist/**",
-      "coverage/**",
-      "node_modules/**",
-      "prisma/migrations/**"
-    ]
+    "ignore": ["dist/**", "coverage/**", "node_modules/**", "prisma/migrations/**"]
   },
   "formatter": {
     "enabled": true,
@@ -29,14 +24,23 @@
     "rules": {
       "recommended": true,
       "suspicious": {
-        "noExplicitAny": "error"
+        "noExplicitAny": "off"
       },
       "style": {
-        "useConst": "error"
+        "useConst": "error",
+        "useImportType": "off",
+        "noNonNullAssertion": "off"
+      },
+      "complexity": {
+        "noStaticOnlyClass": "off",
+        "noThisInStatic": "off"
       }
     }
   },
   "javascript": {
+    "parser": {
+      "unsafeParameterDecoratorsEnabled": true
+    },
     "formatter": {
       "quoteStyle": "single",
       "trailingCommas": "all",

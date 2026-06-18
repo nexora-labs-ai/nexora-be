@@ -1,24 +1,24 @@
 import {
-  Controller,
-  Post,
-  Get,
   Body,
-  UseGuards,
-  Req,
+  Controller,
+  Get,
   HttpCode,
   HttpStatus,
+  Post,
+  Req,
+  UseGuards,
   Version,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { Request } from 'express';
+import { Public } from '../../shared/common/decorators/auth.decorators';
+import { CurrentUser } from '../../shared/common/decorators/current-user.decorator';
 import { AuthService } from './auth.service';
-import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
-import { CurrentUser } from '../../shared/common/decorators/current-user.decorator';
-import { Public } from '../../shared/common/decorators/auth.decorators';
+import { RegisterDto } from './dto/register.dto';
 
 @ApiTags('auth')
 @Controller({ path: 'auth', version: '1' })
@@ -71,9 +71,7 @@ export class AuthController {
   @Get('google/callback')
   @UseGuards(AuthGuard('google'))
   @ApiOperation({ summary: 'Google OAuth2 callback' })
-  googleCallback(
-    @Req() req: Request & { user: { id: string; email: string; role: string } },
-  ) {
+  googleCallback(@Req() req: Request & { user: { id: string; email: string; role: string } }) {
     return this.authService.login(req.user.id, req.user.email, req.user.role);
   }
 }

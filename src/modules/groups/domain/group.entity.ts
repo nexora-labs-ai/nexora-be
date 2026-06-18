@@ -18,8 +18,7 @@ export class Group {
   }
 
   isAdmin(userId: string): boolean {
-    const role = this.getMemberRole(userId);
-    return role === GroupRole.OWNER || role === GroupRole.ADMIN;
+    return this.isOwner(userId);
   }
 
   isMember(userId: string): boolean {

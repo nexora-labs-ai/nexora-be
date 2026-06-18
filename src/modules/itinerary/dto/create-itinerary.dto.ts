@@ -1,10 +1,5 @@
-import {
-  IsString,
-  IsOptional,
-  IsDateString,
-  MaxLength,
-} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsDateString, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class CreateItineraryDto {
   @ApiProperty({ example: 'Bali Adventure 5 Days' })

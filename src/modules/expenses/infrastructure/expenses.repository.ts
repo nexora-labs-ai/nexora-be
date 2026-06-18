@@ -1,10 +1,7 @@
 import { Injectable } from '@nestjs/common';
+import { Currency, ExpenseSplitType, Prisma } from '@prisma/client';
+import { buildPaginationMeta, buildPrismaSkipTake } from '../../../shared/common/pagination';
 import { PrismaService } from '../../../shared/database/prisma.service';
-import { ExpenseSplitType, Prisma } from '@prisma/client';
-import {
-  buildPaginationMeta,
-  buildPrismaSkipTake,
-} from '../../../shared/common/pagination';
 
 @Injectable()
 export class ExpensesRepository {
@@ -14,8 +11,8 @@ export class ExpensesRepository {
     return this.prisma.expense.findUnique({
       where: { id, deletedAt: null },
       include: {
-        payer: true,
-        splits: { include: { user: true } },
+        payers: { include: { user: { include: { profile: true } } } },
+        splits: { include: { user: { include: { profile: true } } } },
         category: true,
       },
     });
@@ -31,15 +28,15 @@ export class ExpensesRepository {
       groupId,
       deletedAt: null,
       ...(filters?.categoryId ? { categoryId: filters.categoryId } : {}),
-      ...(filters?.payerId ? { payerId: filters.payerId } : {}),
+      ...(filters?.payerId ? { payers: { some: { userId: filters.payerId } } } : {}),
     };
 
     const [data, total] = await Promise.all([
       this.prisma.expense.findMany({
         where,
         include: {
-          payer: { select: { id: true, displayName: true, avatarUrl: true } },
-          splits: { include: { user: { select: { id: true, displayName: true } } } },
+          payers: { include: { user: { include: { profile: true } } } },
+          splits: { include: { user: { include: { profile: true } } } },
           category: true,
         },
         orderBy: { date: 'desc' },
@@ -54,7 +51,7 @@ export class ExpensesRepository {
   async create(
     data: {
       groupId: string;
-      payerId: string;
+      createdBy: string;
       title: string;
       description?: string;
       amount: number;
@@ -69,14 +66,22 @@ export class ExpensesRepository {
       const expense = await tx.expense.create({
         data: {
           groupId: data.groupId,
-          payerId: data.payerId,
+          createdBy: data.createdBy,
           title: data.title,
           description: data.description,
           amount: data.amount,
-          currency: data.currency,
+          currency: data.currency as Currency,
           splitType: data.splitType,
           categoryId: data.categoryId,
           date: data.date ?? new Date(),
+        },
+      });
+
+      await tx.expensePayer.create({
+        data: {
+          expenseId: expense.id,
+          userId: data.createdBy,
+          amount: data.amount,
         },
       });
 
@@ -85,7 +90,6 @@ export class ExpensesRepository {
           expenseId: expense.id,
           userId: s.userId,
           amount: s.amount,
-          percentage: s.percentage,
           shares: s.shares,
         })),
       });
@@ -105,22 +109,24 @@ export class ExpensesRepository {
     return this.prisma.$queryRaw<{ userId: string; balance: number }[]>`
       SELECT
         u.id as "userId",
-        u."displayName",
+        up."display_name" as "displayName",
         COALESCE(paid.total, 0) - COALESCE(owed.total, 0) as balance
       FROM users u
-      JOIN group_members gm ON gm."userId" = u.id AND gm."groupId" = ${groupId}
+      LEFT JOIN user_profiles up ON up."user_id" = u.id
+      JOIN group_members gm ON gm."user_id" = u.id AND gm."group_id" = ${groupId}::uuid
       LEFT JOIN (
-        SELECT "payerId", SUM(amount) as total
-        FROM expenses
-        WHERE "groupId" = ${groupId} AND "deletedAt" IS NULL
-        GROUP BY "payerId"
+        SELECT ep."user_id" as "payerId", SUM(ep.amount) as total
+        FROM expense_payers ep
+        JOIN expenses e ON e.id = ep."expense_id"
+        WHERE e."group_id" = ${groupId}::uuid AND e."deleted_at" IS NULL
+        GROUP BY ep."user_id"
       ) paid ON paid."payerId" = u.id
       LEFT JOIN (
-        SELECT "userId", SUM(amount) as total
+        SELECT es."user_id" as "userId", SUM(es.amount) as total
         FROM expense_splits es
-        JOIN expenses e ON e.id = es."expenseId"
-        WHERE e."groupId" = ${groupId} AND e."deletedAt" IS NULL
-        GROUP BY es."userId"
+        JOIN expenses e ON e.id = es."expense_id"
+        WHERE e."group_id" = ${groupId}::uuid AND e."deleted_at" IS NULL
+        GROUP BY es."user_id"
       ) owed ON owed."userId" = u.id
     `;
   }

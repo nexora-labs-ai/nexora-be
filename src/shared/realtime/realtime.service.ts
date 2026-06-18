@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { RealtimeGateway, REALTIME_EVENTS } from './realtime.gateway';
+import { REALTIME_EVENTS, RealtimeGateway } from './realtime.gateway';
 
 @Injectable()
 export class RealtimeService {

@@ -1,19 +1,19 @@
 import {
+  Body,
   Controller,
   Get,
-  Post,
-  Patch,
-  Param,
-  Body,
-  Query,
   HttpCode,
   HttpStatus,
+  Param,
   ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
-import { SettlementsService } from './settlements.service';
-import { CreateSettlementDto } from './dto/create-settlement.dto';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../shared/common/decorators/current-user.decorator';
+import { CreateSettlementDto } from './dto/create-settlement.dto';
+import { SettlementsService } from './settlements.service';
 
 @ApiTags('settlements')
 @ApiBearerAuth()
@@ -32,10 +32,7 @@ export class SettlementsController {
 
   @Post()
   @ApiOperation({ summary: 'Request a settlement' })
-  create(
-    @CurrentUser('id') userId: string,
-    @Body() dto: CreateSettlementDto,
-  ) {
+  create(@CurrentUser('id') userId: string, @Body() dto: CreateSettlementDto) {
     return this.settlementsService.requestSettlement(
       dto.groupId,
       userId,
@@ -48,19 +45,13 @@ export class SettlementsController {
 
   @Patch(':id/complete')
   @ApiOperation({ summary: 'Mark settlement as completed' })
-  complete(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser('id') userId: string,
-  ) {
+  complete(@Param('id', ParseUUIDPipe) id: string, @CurrentUser('id') userId: string) {
     return this.settlementsService.completeSettlement(id, userId);
   }
 
   @Patch(':id/cancel')
   @ApiOperation({ summary: 'Cancel a settlement' })
-  cancel(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser('id') userId: string,
-  ) {
+  cancel(@Param('id', ParseUUIDPipe) id: string, @CurrentUser('id') userId: string) {
     return this.settlementsService.cancelSettlement(id, userId);
   }
 }

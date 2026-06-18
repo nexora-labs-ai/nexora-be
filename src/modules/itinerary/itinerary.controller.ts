@@ -1,19 +1,10 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Body,
-  Param,
-  Patch,
-  Query,
-  ParseUUIDPipe,
-} from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
-import { IsString, IsOptional, IsArray, IsNumber } from 'class-validator';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ItineraryService } from './itinerary.service';
-import { CreateItineraryDto } from './dto/create-itinerary.dto';
+import { IsArray, IsNumber, IsOptional, IsString } from 'class-validator';
 import { CurrentUser } from '../../shared/common/decorators/current-user.decorator';
+import { CreateItineraryDto } from './dto/create-itinerary.dto';
+import { ItineraryService } from './itinerary.service';
 
 class GenerateItineraryDto {
   @ApiProperty() @IsString() destination: string;
@@ -36,10 +27,7 @@ export class ItineraryController {
 
   @Post()
   @ApiOperation({ summary: 'Create an itinerary' })
-  create(
-    @Query('groupId', ParseUUIDPipe) groupId: string,
-    @Body() dto: CreateItineraryDto,
-  ) {
+  create(@Query('groupId', ParseUUIDPipe) groupId: string, @Body() dto: CreateItineraryDto) {
     return this.itineraryService.createItinerary(groupId, dto);
   }
 

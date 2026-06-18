@@ -17,11 +17,7 @@ export interface PaginationQuery {
   limit?: number;
 }
 
-export function buildPaginationMeta(
-  total: number,
-  page: number,
-  limit: number,
-): PaginationMeta {
+export function buildPaginationMeta(total: number, page: number, limit: number): PaginationMeta {
   const totalPages = Math.ceil(total / limit);
   return {
     total,

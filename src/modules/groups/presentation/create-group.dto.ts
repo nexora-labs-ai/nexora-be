@@ -1,11 +1,5 @@
-import {
-  IsString,
-  IsOptional,
-  MinLength,
-  MaxLength,
-  IsISO4217CurrencyCode,
-} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsISO4217CurrencyCode, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 
 export class CreateGroupDto {
   @ApiProperty({ example: 'Bali Trip 2025' })

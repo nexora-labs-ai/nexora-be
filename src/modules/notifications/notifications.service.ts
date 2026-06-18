@@ -1,14 +1,14 @@
+import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { InjectQueue } from '@nestjs/bullmq';
-import { Queue } from 'bullmq';
 import { NotificationType } from '@prisma/client';
-import { NotificationsRepository } from './notifications.repository';
+import { Queue } from 'bullmq';
+import { JOB_NAMES, QUEUES } from '../../shared/queue/queue.constants';
 import { RealtimeService } from '../../shared/realtime/realtime.service';
-import { ExpenseCreatedEvent, EXPENSE_EVENTS } from '../expenses/domain/expense.events';
-import { SETTLEMENT_EVENTS } from '../settlements/settlements.service';
+import { EXPENSE_EVENTS, ExpenseCreatedEvent } from '../expenses/domain/expense.events';
 import { GROUP_EVENTS, MemberAddedEvent } from '../groups/domain/group.events';
-import { QUEUES, JOB_NAMES } from '../../shared/queue/queue.constants';
+import { SETTLEMENT_EVENTS } from '../settlements/settlements.service';
+import { NotificationsRepository } from './notifications.repository';
 
 @Injectable()
 export class NotificationsService {
@@ -77,7 +77,13 @@ export class NotificationsService {
 
   @OnEvent(SETTLEMENT_EVENTS.COMPLETED)
   async onSettlementCompleted(event: unknown) {
-    const settlement = event as { toUserId: string; fromUserId: string; groupId: string; amount: number; currency: string };
+    const settlement = event as {
+      toUserId: string;
+      fromUserId: string;
+      groupId: string;
+      amount: number;
+      currency: string;
+    };
     await this.sendToUser({
       userId: settlement.fromUserId,
       groupId: settlement.groupId,

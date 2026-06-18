@@ -1,23 +1,23 @@
 import {
-  Controller,
-  Get,
-  Post,
-  Patch,
-  Delete,
   Body,
-  Param,
-  Query,
+  Controller,
+  Delete,
+  Get,
   HttpCode,
   HttpStatus,
+  Param,
   ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
-import { GroupsService } from '../application/groups.service';
-import { CreateGroupDto } from './create-group.dto';
-import { UpdateGroupDto } from './update-group.dto';
-import { AddMemberDto } from './add-member.dto';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../../shared/common/decorators/current-user.decorator';
 import { PaginationQueryDto } from '../../../shared/common/dtos/pagination-query.dto';
+import { GroupsService } from '../application/groups.service';
+import { AddMemberDto } from './add-member.dto';
+import { CreateGroupDto } from './create-group.dto';
+import { UpdateGroupDto } from './update-group.dto';
 
 @ApiTags('groups')
 @ApiBearerAuth()
@@ -27,28 +27,19 @@ export class GroupsController {
 
   @Get()
   @ApiOperation({ summary: 'Get all groups for current user' })
-  findMyGroups(
-    @CurrentUser('id') userId: string,
-    @Query() query: PaginationQueryDto,
-  ) {
+  findMyGroups(@CurrentUser('id') userId: string, @Query() query: PaginationQueryDto) {
     return this.groupsService.getUserGroups(userId, query.page ?? 1, query.limit ?? 20);
   }
 
   @Post()
   @ApiOperation({ summary: 'Create a new group' })
-  create(
-    @CurrentUser('id') userId: string,
-    @Body() dto: CreateGroupDto,
-  ) {
+  create(@CurrentUser('id') userId: string, @Body() dto: CreateGroupDto) {
     return this.groupsService.createGroup(dto, userId);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get group by ID' })
-  findOne(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser('id') userId: string,
-  ) {
+  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser('id') userId: string) {
     return this.groupsService.getGroup(id, userId);
   }
 
@@ -65,10 +56,7 @@ export class GroupsController {
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete group' })
-  remove(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser('id') userId: string,
-  ) {
+  remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser('id') userId: string) {
     return this.groupsService.deleteGroup(id, userId);
   }
 

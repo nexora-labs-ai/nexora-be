@@ -1,11 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../../shared/database/prisma.service';
-import { GroupRole } from '@prisma/client';
+import { Currency, GroupRole } from '@prisma/client';
 import {
+  PaginatedResult,
   buildPaginationMeta,
   buildPrismaSkipTake,
-  PaginatedResult,
 } from '../../../shared/common/pagination';
+import { PrismaService } from '../../../shared/database/prisma.service';
 
 @Injectable()
 export class GroupsRepository {
@@ -15,7 +15,7 @@ export class GroupsRepository {
     return this.prisma.group.findUnique({
       where: { id, deletedAt: null },
       include: {
-        members: { include: { user: true } },
+        members: { include: { user: { include: { profile: true } } } },
       },
     });
   }
@@ -63,7 +63,7 @@ export class GroupsRepository {
       data: {
         name: data.name,
         description: data.description,
-        currency: data.currency,
+        currency: data.currency as Currency,
         members: {
           create: {
             userId: data.createdByUserId,

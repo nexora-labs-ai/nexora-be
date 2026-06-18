@@ -1,10 +1,10 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Job } from 'bullmq';
 import { Logger } from '@nestjs/common';
 import { NotificationType } from '@prisma/client';
-import { QUEUES, JOB_NAMES } from '../../../shared/queue/queue.constants';
-import { NotificationsRepository } from '../notifications.repository';
+import { Job } from 'bullmq';
+import { JOB_NAMES, QUEUES } from '../../../shared/queue/queue.constants';
 import { RealtimeService } from '../../../shared/realtime/realtime.service';
+import { NotificationsRepository } from '../notifications.repository';
 
 @Processor(QUEUES.NOTIFICATIONS)
 export class SendNotificationProcessor extends WorkerHost {

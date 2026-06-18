@@ -1,17 +1,10 @@
-import {
-  Controller,
-  Post,
-  Delete,
-  Body,
-  Query,
-  ParseUUIDPipe,
-} from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
-import { IsString, IsOptional, IsBoolean } from 'class-validator';
+import { Body, Controller, Delete, ParseUUIDPipe, Post, Query } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsBoolean, IsOptional, IsString } from 'class-validator';
+import { CurrentUser } from '../../shared/common/decorators/current-user.decorator';
 import { ChatService } from './chat/chat.service';
 import { MemoryService } from './memory/memory.service';
-import { CurrentUser } from '../../shared/common/decorators/current-user.decorator';
 
 class ChatDto {
   @ApiProperty() @IsString() message: string;
@@ -44,10 +37,7 @@ export class AiController {
 
   @Delete('chat/history')
   @ApiOperation({ summary: 'Clear chat history' })
-  clearHistory(
-    @CurrentUser('id') userId: string,
-    @Query('groupId') groupId?: string,
-  ) {
+  clearHistory(@CurrentUser('id') userId: string, @Query('groupId') groupId?: string) {
     return this.memoryService.clearHistory(userId, groupId);
   }
 }

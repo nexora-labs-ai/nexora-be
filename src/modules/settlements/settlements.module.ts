@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
-import { SettlementsController } from './settlements.controller';
-import { SettlementsService } from './settlements.service';
-import { SettlementsRepository } from './settlements.repository';
 import { GroupsModule } from '../groups/groups.module';
+import { SettlementsController } from './settlements.controller';
+import { SettlementsRepository } from './settlements.repository';
+import { SettlementsService } from './settlements.service';
 
 @Module({
   imports: [GroupsModule],

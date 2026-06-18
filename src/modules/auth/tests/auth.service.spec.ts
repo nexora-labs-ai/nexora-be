@@ -1,10 +1,10 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { AuthService } from '../auth.service';
-import { AuthRepository } from '../auth.repository';
-import { UsersService } from '../../users/users.service';
-import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
+import { Test, TestingModule } from '@nestjs/testing';
 import { ConflictError } from '../../../shared/common/domain-errors';
+import { UsersService } from '../../users/users.service';
+import { AuthRepository } from '../auth.repository';
+import { AuthService } from '../auth.service';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -28,7 +28,6 @@ describe('AuthService', () => {
           provide: UsersService,
           useValue: {
             findByEmail: jest.fn(),
-            findByUsername: jest.fn(),
             create: jest.fn(),
           },
         },
@@ -55,7 +54,6 @@ describe('AuthService', () => {
       await expect(
         service.register({
           email: 'existing@example.com',
-          username: 'test',
           displayName: 'Test',
           password: 'Test1234!',
         }),
@@ -64,7 +62,6 @@ describe('AuthService', () => {
 
     it('should register a new user and return tokens', async () => {
       usersService.findByEmail.mockResolvedValue(null);
-      usersService.findByUsername.mockResolvedValue(null);
       usersService.create.mockResolvedValue({
         id: 'user-1',
         email: 'new@example.com',
@@ -74,7 +71,6 @@ describe('AuthService', () => {
 
       const result = await service.register({
         email: 'new@example.com',
-        username: 'newuser',
         displayName: 'New User',
         password: 'Test1234!',
       });

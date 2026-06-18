@@ -1,14 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { SettlementsRepository } from './settlements.repository';
-import { GroupsService } from '../groups/application/groups.service';
+import {
+  BusinessRuleError,
+  ForbiddenError,
+  NotFoundError,
+} from '../../shared/common/domain-errors';
 import { CacheService } from '../../shared/infrastructure/cache/cache.service';
 import { RealtimeService } from '../../shared/realtime/realtime.service';
-import {
-  NotFoundError,
-  ForbiddenError,
-  BusinessRuleError,
-} from '../../shared/common/domain-errors';
+import { GroupsService } from '../groups/application/groups.service';
+import { SettlementsRepository } from './settlements.repository';
 
 export const SETTLEMENT_EVENTS = {
   REQUESTED: 'settlement.requested',
@@ -74,8 +74,8 @@ export class SettlementsService {
     const completed = await this.settlementsRepository.complete(id);
 
     this.eventEmitter.emit(SETTLEMENT_EVENTS.COMPLETED, completed);
-    await this.cacheService.del(CacheService.keys.settlement(settlement.groupId));
-    this.realtimeService.notifyGroupSettlementCompleted(settlement.groupId, completed);
+    await this.cacheService.del(CacheService.keys.settlement(settlement.groupId!));
+    this.realtimeService.notifyGroupSettlementCompleted(settlement.groupId!, completed);
 
     return completed;
   }
@@ -89,7 +89,7 @@ export class SettlementsService {
     }
 
     const cancelled = await this.settlementsRepository.cancel(id);
-    await this.cacheService.del(CacheService.keys.settlement(settlement.groupId));
+    await this.cacheService.del(CacheService.keys.settlement(settlement.groupId!));
 
     return cancelled;
   }

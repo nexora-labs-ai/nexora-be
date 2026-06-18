@@ -1,10 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../shared/database/prisma.service';
 import { NotificationType } from '@prisma/client';
-import {
-  buildPaginationMeta,
-  buildPrismaSkipTake,
-} from '../../shared/common/pagination';
+import { buildPaginationMeta, buildPrismaSkipTake } from '../../shared/common/pagination';
+import { PrismaService } from '../../shared/database/prisma.service';
 
 @Injectable()
 export class NotificationsRepository {

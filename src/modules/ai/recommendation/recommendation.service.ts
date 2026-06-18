@@ -1,6 +1,6 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
-import { AI_PORT, AiPort } from '../../../shared/infrastructure/ports/ai.port';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../shared/database/prisma.service';
+import { AI_PORT, AiPort } from '../../../shared/infrastructure/ports/ai.port';
 
 @Injectable()
 export class RecommendationAiService {
@@ -24,11 +24,14 @@ export class RecommendationAiService {
     ]);
 
     const totalSpent = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
-    const byCategory = expenses.reduce((acc, e) => {
-      const cat = e.category?.name ?? 'Other';
-      acc[cat] = (acc[cat] ?? 0) + Number(e.amount);
-      return acc;
-    }, {} as Record<string, number>);
+    const byCategory = expenses.reduce(
+      (acc, e) => {
+        const cat = e.category?.name ?? 'Other';
+        acc[cat] = (acc[cat] ?? 0) + Number(e.amount);
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
 
     const prompt = `
 Analyze the following group expense data and provide 3-5 actionable recommendations:
@@ -40,7 +43,7 @@ Spending by category: ${JSON.stringify(byCategory, null, 2)}
 Provide recommendations in JSON format:
 [
   {
-    "type": "saving|optimization|activity|budget_alert",
+    "type": "RESTAURANT|CAFE|HOTEL|ACTIVITY|ITINERARY",
     "title": "Short title",
     "content": "Detailed recommendation",
     "priority": "high|medium|low"
@@ -66,7 +69,7 @@ Return only valid JSON.`;
     await this.prisma.recommendation.createMany({
       data: recommendations.map((r) => ({
         groupId,
-        type: r.type,
+        type: (r.type.toUpperCase() as any) || 'ACTIVITY',
         title: r.title,
         content: { body: r.content, priority: r.priority },
         expiresAt,

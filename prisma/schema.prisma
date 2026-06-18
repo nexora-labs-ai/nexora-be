@@ -1,39 +1,35 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+datasource db {
+  provider = "postgresql"
+}
 
 generator client {
   provider = "prisma-client-js"
 }
-
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
-
-// ============================================================
-// Enums
-// ============================================================
 
 enum UserRole {
   ADMIN
   USER
 }
 
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
 enum AuthProvider {
   LOCAL
   GOOGLE
+  MEZON
 }
 
 enum GroupRole {
   OWNER
-  ADMIN
   MEMBER
 }
 
 enum ExpenseSplitType {
-  EQUAL
   EXACT
-  PERCENTAGE
   SHARES
 }
 
@@ -41,6 +37,37 @@ enum SettlementStatus {
   PENDING
   COMPLETED
   CANCELLED
+}
+
+enum ItineraryStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum RecommendationType {
+  RESTAURANT
+  CAFE
+  HOTEL
+  ACTIVITY
+  ITINERARY
+}
+
+enum FundTransactionType {
+  CONTRIBUTION
+  EXPENSE
+  REFUND
+}
+
+enum FundingSource {
+  PERSONAL
+  GROUP_FUND
+}
+
+enum Currency {
+  VND
+  USD
+  EUR
+  JPY
 }
 
 enum NotificationType {
@@ -54,382 +81,385 @@ enum NotificationType {
   SYSTEM
 }
 
-enum PollStatus {
-  ACTIVE
-  CLOSED
-  CANCELLED
-}
-
-enum ItineraryStatus {
-  DRAFT
-  PUBLISHED
-  ARCHIVED
-}
-
-enum AuditAction {
-  CREATE
-  UPDATE
-  DELETE
-  LOGIN
-  LOGOUT
-  EXPORT
-}
-
-// ============================================================
-// Core Models
-// ============================================================
-
 model User {
-  id             String       @id @default(uuid())
-  email          String       @unique
-  username       String       @unique
-  displayName    String
-  avatarUrl      String?
-  role           UserRole     @default(USER)
-  provider       AuthProvider @default(LOCAL)
-  providerId     String?
-  passwordHash   String?
-  isActive       Boolean      @default(true)
-  isEmailVerified Boolean     @default(false)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  deletedAt      DateTime?
+  id              String            @id @default(uuid()) @db.Uuid
+  email           String?           @unique
+  role            UserRole?
+  status          UserStatus?
+  lastLoginAt     DateTime?         @map("last_login_at")
+  createdAt       DateTime?         @default(now()) @map("created_at")
+  updatedAt       DateTime?         @updatedAt @map("updated_at")
+  deletedAt       DateTime?         @map("deleted_at")
 
-  // Relations
-  refreshTokens    RefreshToken[]
-  groupMemberships GroupMember[]
-  expensesPaid     Expense[]       @relation("ExpensePayer")
-  expenseSplits    ExpenseSplit[]
-  settlementsFrom  Settlement[]    @relation("SettlementFrom")
-  settlementsTo    Settlement[]    @relation("SettlementTo")
-  notifications    Notification[]
-  pollVotes        PollVote[]
-  auditLogs        AuditLog[]
+  profile         UserProfile?
+  authAccounts    UserAuthAccount[]
+  notificationSettings NotificationSettings?
+  refreshTokens   RefreshToken[]
+  groupMembers    GroupMember[]
+  groupInvitations GroupInvitation[] @relation("InvitedBy")
+  fundTransactions FundTransaction[] @relation("CreatedBy")
+  expensesCreated Expense[]          @relation("ExpenseCreatedBy")
+  expensePayers   ExpensePayer[]
+  expenseSplits   ExpenseSplit[]
+  expenseAttachments ExpenseAttachment[]
+  settlementsFrom Settlement[]       @relation("SettlementFrom")
+  settlementsTo   Settlement[]       @relation("SettlementTo")
+  notifications   Notification[]
+  itineraries     Itinerary[]        @relation("ItineraryCreatedBy")
+  recommendations Recommendation[]   @relation("RecommendationCreatedBy")
+  aiConversations AiConversation[]
 
   @@map("users")
-  @@index([email])
-  @@index([username])
+}
+
+model UserProfile {
+  userId          String            @id @map("user_id") @db.Uuid
+  displayName     String?           @map("display_name")
+  avatarUrl       String?           @map("avatar_url")
+  bio             String?
+  phone           String?
+  createdAt       DateTime?         @default(now()) @map("created_at")
+  updatedAt       DateTime?         @updatedAt @map("updated_at")
+
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
+model UserAuthAccount {
+  id               String           @id @default(uuid()) @db.Uuid
+  userId           String?          @map("user_id") @db.Uuid
+  provider         AuthProvider?
+  providerUserId   String?          @map("provider_user_id")
+  passwordHash     String?          @map("password_hash")
+  createdAt        DateTime?        @default(now()) @map("created_at")
+  updatedAt        DateTime?        @updatedAt @map("updated_at")
+
+  user             User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerUserId])
+  @@unique([userId, provider])
+  @@map("user_auth_accounts")
+}
+
+model NotificationSettings {
+  userId                 String      @id @map("user_id") @db.Uuid
+  emailEnabled           Boolean?    @map("email_enabled")
+  pushEnabled            Boolean?    @map("push_enabled")
+  expenseAlert           Boolean?    @map("expense_alert")
+  settlementAlert        Boolean?    @map("settlement_alert")
+  recommendationAlert    Boolean?    @map("recommendation_alert")
+
+  user                   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_settings")
 }
 
 model RefreshToken {
-  id          String   @id @default(uuid())
-  token       String   @unique
-  userId      String
-  expiresAt   DateTime
-  isRevoked   Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  ipAddress   String?
-  userAgent   String?
+  id         String     @id @default(uuid()) @db.Uuid
+  token      String?
+  userId     String?    @map("user_id") @db.Uuid
+  expiresAt  DateTime?  @map("expires_at")
+  createdAt  DateTime?  @default(now()) @map("created_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user       User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("refresh_tokens")
-  @@index([token])
-  @@index([userId])
 }
 
-// ============================================================
-// Groups
-// ============================================================
-
 model Group {
-  id          String    @id @default(uuid())
-  name        String
-  description String?
-  avatarUrl   String?
-  currency    String    @default("USD")
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  deletedAt   DateTime?
+  id             String             @id @default(uuid()) @db.Uuid
+  name           String?
+  description    String?
+  avatarUrl      String?            @map("avatar_url")
+  currency       Currency?
+  isActive       Boolean?           @map("is_active")
+  createdAt      DateTime?          @default(now()) @map("created_at")
+  updatedAt      DateTime?          @updatedAt @map("updated_at")
+  deletedAt      DateTime?          @map("deleted_at")
 
-  members      GroupMember[]
-  expenses     Expense[]
-  settlements  Settlement[]
-  polls        Poll[]
-  itineraries  Itinerary[]
-  notifications Notification[]
+  members        GroupMember[]
+  invitations    GroupInvitation[]
+  fund           GroupFund?
+  expenses       Expense[]
+  settlements    Settlement[]
+  notifications  Notification[]
+  itineraries    Itinerary[]
+  recommendations Recommendation[]
+  aiConversations AiConversation[]
 
   @@map("groups")
 }
 
 model GroupMember {
-  id        String    @id @default(uuid())
-  groupId   String
-  userId    String
-  role      GroupRole @default(MEMBER)
-  joinedAt  DateTime  @default(now())
-  leftAt    DateTime?
+  id         String     @id @default(uuid()) @db.Uuid
+  groupId    String?    @map("group_id") @db.Uuid
+  userId     String?    @map("user_id") @db.Uuid
+  role       GroupRole?
+  joinedAt   DateTime?  @default(now()) @map("joined_at")
+  leftAt     DateTime?  @map("left_at")
 
-  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group      Group?     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user       User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([groupId, userId])
+  @@index([groupId, role])
   @@map("group_members")
-  @@index([groupId])
-  @@index([userId])
 }
 
-// ============================================================
-// Expenses
-// ============================================================
+model GroupInvitation {
+  id          String     @id @default(uuid()) @db.Uuid
+  groupId     String?    @map("group_id") @db.Uuid
+  email       String?
+  invitedBy   String?    @map("invited_by") @db.Uuid
+  token       String?    @unique
+  expiresAt   DateTime?  @map("expires_at")
+  acceptedAt  DateTime?  @map("accepted_at")
+  createdAt   DateTime?  @default(now()) @map("created_at")
 
-model Expense {
-  id          String           @id @default(uuid())
-  groupId     String
-  payerId     String
-  title       String
-  description String?
-  amount      Decimal          @db.Decimal(12, 2)
-  currency    String           @default("USD")
-  splitType   ExpenseSplitType @default(EQUAL)
-  categoryId  String?
-  receiptUrl  String?
-  date        DateTime         @default(now())
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-  deletedAt   DateTime?
+  group       Group?     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  inviter     User?      @relation("InvitedBy", fields: [invitedBy], references: [id])
 
-  group    Group         @relation(fields: [groupId], references: [id])
-  payer    User          @relation("ExpensePayer", fields: [payerId], references: [id])
-  category Category?     @relation(fields: [categoryId], references: [id])
-  splits   ExpenseSplit[]
-
-  @@map("expenses")
-  @@index([groupId])
-  @@index([payerId])
-  @@index([date])
+  @@map("group_invitations")
 }
 
-model ExpenseSplit {
-  id         String   @id @default(uuid())
-  expenseId  String
-  userId     String
-  amount     Decimal  @db.Decimal(12, 2)
-  percentage Decimal? @db.Decimal(5, 2)
-  shares     Int?
-  isPaid     Boolean  @default(false)
-  paidAt     DateTime?
+model GroupFund {
+  id         String            @id @default(uuid()) @db.Uuid
+  groupId    String?           @unique @map("group_id") @db.Uuid
+  balance    Decimal?
+  createdAt  DateTime?         @default(now()) @map("created_at")
+  updatedAt  DateTime?         @updatedAt @map("updated_at")
 
-  expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id])
+  group      Group?            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  transactions FundTransaction[]
 
-  @@unique([expenseId, userId])
-  @@map("expense_splits")
-  @@index([expenseId])
-  @@index([userId])
+  @@map("group_funds")
+}
+
+model FundTransaction {
+  id         String               @id @default(uuid()) @db.Uuid
+  fundId     String?              @map("fund_id") @db.Uuid
+  createdBy  String?              @map("created_by") @db.Uuid
+  expenseId  String?              @map("expense_id") @db.Uuid
+  type       FundTransactionType?
+  amount     Decimal?
+  note       String?
+  createdAt  DateTime?            @default(now()) @map("created_at")
+
+  fund       GroupFund?           @relation(fields: [fundId], references: [id], onDelete: Cascade)
+  creator    User?                @relation("CreatedBy", fields: [createdBy], references: [id])
+  expense    Expense?             @relation(fields: [expenseId], references: [id])
+
+  @@index([fundId, createdAt])
+  @@map("fund_transactions")
 }
 
 model Category {
-  id        String    @id @default(uuid())
-  name      String
-  icon      String?
-  color     String?
-  isDefault Boolean   @default(false)
-  createdAt DateTime  @default(now())
+  id         String     @id @default(uuid()) @db.Uuid
+  name       String?
+  icon       String?
+  color      String?
+  isDefault  Boolean?   @map("is_default")
+  createdAt  DateTime?  @default(now()) @map("created_at")
+  deletedAt  DateTime?  @map("deleted_at")
 
-  expenses Expense[]
+  expenses   Expense[]
 
   @@map("categories")
 }
 
-// ============================================================
-// Settlements
-// ============================================================
+model Expense {
+  id             String            @id @default(uuid()) @db.Uuid
+  groupId        String?           @map("group_id") @db.Uuid
+  categoryId     String?           @map("category_id") @db.Uuid
+  createdBy      String?           @map("created_by") @db.Uuid
+  title          String?
+  description    String?
+  amount         Decimal?
+  currency       Currency?
+  fundingSource  FundingSource?    @map("funding_source")
+  splitType      ExpenseSplitType? @map("split_type")
+  date           DateTime?
+  createdAt      DateTime?         @default(now()) @map("created_at")
+  updatedAt      DateTime?         @updatedAt @map("updated_at")
+  deletedAt      DateTime?         @map("deleted_at")
+
+  group          Group?            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  category       Category?         @relation(fields: [categoryId], references: [id])
+  creator        User?             @relation("ExpenseCreatedBy", fields: [createdBy], references: [id])
+  
+  fundTransactions FundTransaction[]
+  payers         ExpensePayer[]
+  splits         ExpenseSplit[]
+  attachments    ExpenseAttachment[]
+
+  @@index([groupId, date])
+  @@index([createdBy])
+  @@index([categoryId])
+  @@map("expenses")
+}
+
+model ExpensePayer {
+  id         String   @id @default(uuid()) @db.Uuid
+  expenseId  String?  @map("expense_id") @db.Uuid
+  userId     String?  @map("user_id") @db.Uuid
+  amount     Decimal?
+
+  expense    Expense? @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  user       User?    @relation(fields: [userId], references: [id])
+
+  @@unique([expenseId, userId])
+  @@map("expense_payers")
+}
+
+model ExpenseSplit {
+  id         String    @id @default(uuid()) @db.Uuid
+  expenseId  String?   @map("expense_id") @db.Uuid
+  userId     String?   @map("user_id") @db.Uuid
+  amount     Decimal?
+  shares     Int?
+  isPaid     Boolean?  @map("is_paid")
+  paidAt     DateTime? @map("paid_at")
+
+  expense    Expense?  @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  user       User?     @relation(fields: [userId], references: [id])
+
+  @@unique([expenseId, userId])
+  @@map("expense_splits")
+}
+
+model ExpenseAttachment {
+  id          String   @id @default(uuid()) @db.Uuid
+  expenseId   String?  @map("expense_id") @db.Uuid
+  uploadedBy  String?  @map("uploaded_by") @db.Uuid
+  fileUrl     String?  @map("file_url")
+  createdAt   DateTime? @default(now()) @map("created_at")
+
+  expense     Expense? @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  uploader    User?    @relation(fields: [uploadedBy], references: [id])
+
+  @@map("expense_attachments")
+}
 
 model Settlement {
-  id          String           @id @default(uuid())
-  groupId     String
-  fromUserId  String
-  toUserId    String
-  amount      Decimal          @db.Decimal(12, 2)
-  currency    String           @default("USD")
-  status      SettlementStatus @default(PENDING)
-  note        String?
-  settledAt   DateTime?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
+  id           String            @id @default(uuid()) @db.Uuid
+  groupId      String?           @map("group_id") @db.Uuid
+  fromUserId   String?           @map("from_user_id") @db.Uuid
+  toUserId     String?           @map("to_user_id") @db.Uuid
+  amount       Decimal?
+  currency     Currency?
+  status       SettlementStatus?
+  note         String?
+  settledAt    DateTime?         @map("settled_at")
+  createdAt    DateTime?         @default(now()) @map("created_at")
+  updatedAt    DateTime?         @updatedAt @map("updated_at")
 
-  group    Group @relation(fields: [groupId], references: [id])
-  fromUser User  @relation("SettlementFrom", fields: [fromUserId], references: [id])
-  toUser   User  @relation("SettlementTo", fields: [toUserId], references: [id])
+  group        Group?            @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  fromUser     User?             @relation("SettlementFrom", fields: [fromUserId], references: [id])
+  toUser       User?             @relation("SettlementTo", fields: [toUserId], references: [id])
 
   @@map("settlements")
-  @@index([groupId])
-  @@index([fromUserId])
-  @@index([toUserId])
-  @@index([status])
 }
-
-// ============================================================
-// Notifications
-// ============================================================
 
 model Notification {
-  id        String           @id @default(uuid())
-  userId    String
-  groupId   String?
-  type      NotificationType
-  title     String
-  body      String
-  data      Json?
-  isRead    Boolean          @default(false)
-  readAt    DateTime?
-  createdAt DateTime         @default(now())
+  id         String            @id @default(uuid()) @db.Uuid
+  userId     String?           @map("user_id") @db.Uuid
+  groupId    String?           @map("group_id") @db.Uuid
+  type       NotificationType?
+  title      String?
+  body       String?
+  data       Json?
+  isRead     Boolean?          @default(false) @map("is_read")
+  readAt     DateTime?         @map("read_at")
+  createdAt  DateTime?         @default(now()) @map("created_at")
 
-  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  group Group? @relation(fields: [groupId], references: [id])
+  user       User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group      Group?            @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
-  @@map("notifications")
-  @@index([userId])
   @@index([userId, isRead])
+  @@map("notifications")
 }
-
-// ============================================================
-// Polls
-// ============================================================
-
-model Poll {
-  id          String     @id @default(uuid())
-  groupId     String
-  question    String
-  description String?
-  status      PollStatus @default(ACTIVE)
-  expiresAt   DateTime?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-
-  group   Group        @relation(fields: [groupId], references: [id])
-  options PollOption[]
-
-  @@map("polls")
-  @@index([groupId])
-  @@index([status])
-}
-
-model PollOption {
-  id     String @id @default(uuid())
-  pollId String
-  text   String
-  order  Int    @default(0)
-
-  poll  Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
-  votes PollVote[]
-
-  @@map("poll_options")
-  @@index([pollId])
-}
-
-model PollVote {
-  id       String   @id @default(uuid())
-  optionId String
-  userId   String
-  votedAt  DateTime @default(now())
-
-  option PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
-  user   User       @relation(fields: [userId], references: [id])
-
-  @@unique([optionId, userId])
-  @@map("poll_votes")
-}
-
-// ============================================================
-// Itinerary
-// ============================================================
 
 model Itinerary {
-  id          String          @id @default(uuid())
-  groupId     String
-  title       String
+  id          String           @id @default(uuid()) @db.Uuid
+  groupId     String?          @map("group_id") @db.Uuid
+  createdBy   String?          @map("created_by") @db.Uuid
+  title       String?
   description String?
-  startDate   DateTime?
-  endDate     DateTime?
   destination String?
-  status      ItineraryStatus @default(DRAFT)
-  aiGenerated Boolean         @default(false)
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  startDate   DateTime?        @map("start_date")
+  endDate     DateTime?        @map("end_date")
+  status      ItineraryStatus?
+  createdAt   DateTime?        @default(now()) @map("created_at")
+  updatedAt   DateTime?        @updatedAt @map("updated_at")
 
-  group Group          @relation(fields: [groupId], references: [id])
-  items ItineraryItem[]
+  group       Group?           @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  creator     User?            @relation("ItineraryCreatedBy", fields: [createdBy], references: [id])
+  items       ItineraryItem[]
 
   @@map("itineraries")
-  @@index([groupId])
 }
 
 model ItineraryItem {
-  id           String    @id @default(uuid())
-  itineraryId  String
-  title        String
-  description  String?
-  location     String?
-  startTime    DateTime?
-  endTime      DateTime?
-  estimatedCost Decimal? @db.Decimal(12, 2)
-  order        Int       @default(0)
-  notes        String?
+  id             String     @id @default(uuid()) @db.Uuid
+  itineraryId    String?    @map("itinerary_id") @db.Uuid
+  title          String?
+  description    String?
+  location       String?
+  startTime      DateTime?  @map("start_time")
+  endTime        DateTime?  @map("end_time")
+  estimatedCost  Decimal?   @map("estimated_cost")
+  orderNo        Int?       @map("order_no")
+  notes          String?
 
-  itinerary Itinerary @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
+  itinerary      Itinerary? @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
 
+  @@index([itineraryId, orderNo])
   @@map("itinerary_items")
-  @@index([itineraryId])
 }
 
-// ============================================================
-// AI / Recommendations
-// ============================================================
-
 model Recommendation {
-  id          String   @id @default(uuid())
-  groupId     String
-  type        String
-  title       String
-  content     Json
-  metadata    Json?
-  score       Float?
-  isActedOn   Boolean  @default(false)
-  expiresAt   DateTime?
-  createdAt   DateTime @default(now())
+  id         String              @id @default(uuid()) @db.Uuid
+  groupId    String?             @map("group_id") @db.Uuid
+  createdBy  String?             @map("created_by") @db.Uuid
+  type       RecommendationType?
+  title      String?
+  content    Json?
+  metadata   Json?
+  score      Float?
+  expiresAt  DateTime?           @map("expires_at")
+  createdAt  DateTime?           @default(now()) @map("created_at")
+
+  group      Group?              @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  creator    User?               @relation("RecommendationCreatedBy", fields: [createdBy], references: [id])
 
   @@map("recommendations")
-  @@index([groupId])
-  @@index([type])
 }
 
 model AiConversation {
-  id        String   @id @default(uuid())
-  userId    String
-  groupId   String?
-  messages  Json
-  context   Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String     @id @default(uuid()) @db.Uuid
+  userId     String?    @map("user_id") @db.Uuid
+  groupId    String?    @map("group_id") @db.Uuid
+  context    Json?
+  createdAt  DateTime?  @default(now()) @map("created_at")
+  updatedAt  DateTime?  @updatedAt @map("updated_at")
+
+  user       User?      @relation(fields: [userId], references: [id])
+  group      Group?     @relation(fields: [groupId], references: [id])
+  messages   AiMessage[]
 
   @@map("ai_conversations")
-  @@index([userId])
 }
 
-// ============================================================
-// Audit
-// ============================================================
+model AiMessage {
+  id              String          @id @default(uuid()) @db.Uuid
+  conversationId  String?         @map("conversation_id") @db.Uuid
+  role            String?
+  content         String?
+  createdAt       DateTime?       @default(now()) @map("created_at")
 
-model AuditLog {
-  id          String      @id @default(uuid())
-  userId      String?
-  action      AuditAction
-  entity      String
-  entityId    String?
-  oldValues   Json?
-  newValues   Json?
-  ipAddress   String?
-  userAgent   String?
-  correlationId String?
-  createdAt   DateTime    @default(now())
+  conversation    AiConversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
-  user User? @relation(fields: [userId], references: [id])
-
-  @@map("audit_logs")
-  @@index([userId])
-  @@index([entity, entityId])
-  @@index([createdAt])
+  @@index([conversationId, createdAt])
+  @@map("ai_messages")
 }

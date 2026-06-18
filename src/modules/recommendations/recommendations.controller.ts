@@ -1,13 +1,5 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Param,
-  Query,
-  Patch,
-  ParseUUIDPipe,
-} from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RecommendationsService } from './recommendations.service';
 
 @ApiTags('recommendations')
@@ -24,10 +16,7 @@ export class RecommendationsController {
 
   @Post('generate')
   @ApiOperation({ summary: 'Trigger recommendation generation' })
-  generate(
-    @Query('groupId', ParseUUIDPipe) groupId: string,
-    @Query('type') type: string = 'activity',
-  ) {
+  generate(@Query('groupId', ParseUUIDPipe) groupId: string, @Query('type') type = 'activity') {
     return this.recommendationsService.triggerRecommendationGeneration(groupId, type);
   }
 

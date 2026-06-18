@@ -1,5 +1,5 @@
-import { Injectable, Inject } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Inject, Injectable } from '@nestjs/common';
 import { Cache } from 'cache-manager';
 
 @Injectable()
@@ -18,11 +18,7 @@ export class CacheService {
     await this.cache.del(key);
   }
 
-  async getOrSet<T>(
-    key: string,
-    factory: () => Promise<T>,
-    ttlSeconds?: number,
-  ): Promise<T> {
+  async getOrSet<T>(key: string, factory: () => Promise<T>, ttlSeconds?: number): Promise<T> {
     const cached = await this.get<T>(key);
     if (cached !== undefined) return cached;
 
@@ -33,7 +29,8 @@ export class CacheService {
 
   async invalidateByPattern(pattern: string): Promise<void> {
     // Implementation depends on Redis SCAN — handled at infrastructure level
-    const store = (this.cache as unknown as { store: { keys?: (p: string) => Promise<string[]> } }).store;
+    const store = (this.cache as unknown as { store: { keys?: (p: string) => Promise<string[]> } })
+      .store;
     if (store?.keys) {
       const keys = await store.keys(pattern);
       await Promise.all(keys.map((k) => this.del(k)));

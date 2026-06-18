@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import { Currency, SettlementStatus } from '@prisma/client';
 import { PrismaService } from '../../shared/database/prisma.service';
-import { SettlementStatus } from '@prisma/client';
 
 @Injectable()
 export class SettlementsRepository {
@@ -10,8 +10,8 @@ export class SettlementsRepository {
     return this.prisma.settlement.findUnique({
       where: { id },
       include: {
-        fromUser: { select: { id: true, displayName: true, avatarUrl: true } },
-        toUser: { select: { id: true, displayName: true, avatarUrl: true } },
+        fromUser: { include: { profile: true } },
+        toUser: { include: { profile: true } },
       },
     });
   }
@@ -20,8 +20,8 @@ export class SettlementsRepository {
     return this.prisma.settlement.findMany({
       where: { groupId },
       include: {
-        fromUser: { select: { id: true, displayName: true } },
-        toUser: { select: { id: true, displayName: true } },
+        fromUser: { include: { profile: true } },
+        toUser: { include: { profile: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -37,7 +37,12 @@ export class SettlementsRepository {
   }) {
     return this.prisma.settlement.create({
       data: {
-        ...data,
+        groupId: data.groupId,
+        fromUserId: data.fromUserId,
+        toUserId: data.toUserId,
+        amount: data.amount,
+        currency: data.currency as Currency,
+        note: data.note,
         status: SettlementStatus.PENDING,
       },
     });

@@ -1,5 +1,4 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
-import { AI_PORT, AiPort } from '../../../shared/infrastructure/ports/ai.port';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../shared/database/prisma.service';
 
 export interface ChatMessage {
@@ -17,38 +16,48 @@ export class MemoryService {
     return this.prisma.aiConversation.findFirst({
       where: { userId, groupId: groupId ?? null },
       orderBy: { updatedAt: 'desc' },
-    });
-  }
-
-  async appendMessage(
-    userId: string,
-    message: ChatMessage,
-    groupId?: string,
-  ) {
-    const conversation = await this.getConversation(userId, groupId);
-
-    if (conversation) {
-      const messages = (conversation.messages as unknown) as ChatMessage[];
-      const updated = [...messages, message].slice(-50); // Keep last 50 messages
-
-      return this.prisma.aiConversation.update({
-        where: { id: conversation.id },
-        data: { messages: updated as unknown as object[] },
-      });
-    }
-
-    return this.prisma.aiConversation.create({
-      data: {
-        userId,
-        groupId,
-        messages: [message] as unknown as object[],
+      include: {
+        messages: {
+          orderBy: { createdAt: 'asc' },
+        },
       },
     });
   }
 
+  async appendMessage(userId: string, message: ChatMessage, groupId?: string) {
+    let conversation = await this.getConversation(userId, groupId);
+
+    if (!conversation) {
+      conversation = await this.prisma.aiConversation.create({
+        data: {
+          userId,
+          groupId: groupId ?? null,
+        },
+        include: { messages: true },
+      });
+    }
+
+    const newMessage = await this.prisma.aiMessage.create({
+      data: {
+        conversationId: conversation.id,
+        role: message.role,
+        content: message.content,
+      },
+    });
+
+    // Optionally cleanup old messages if there are too many,
+    // but append usually just means creating a new record.
+
+    return conversation;
+  }
+
   async getHistory(userId: string, groupId?: string): Promise<ChatMessage[]> {
     const conversation = await this.getConversation(userId, groupId);
-    return (conversation?.messages as unknown as ChatMessage[]) ?? [];
+    if (!conversation) return [];
+    return conversation.messages.map((m) => ({
+      role: m.role as 'user' | 'assistant' | 'system',
+      content: m.content ?? '',
+    }));
   }
 
   async clearHistory(userId: string, groupId?: string) {

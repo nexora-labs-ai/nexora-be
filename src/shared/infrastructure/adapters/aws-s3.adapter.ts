@@ -1,17 +1,17 @@
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
-  S3Client,
-  PutObjectCommand,
-  DeleteObjectCommand,
-  GetObjectCommand,
-} from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import {
+  GetPresignedUrlRequest,
   StoragePort,
   UploadFileRequest,
   UploadFileResponse,
-  GetPresignedUrlRequest,
 } from '../ports/storage.port';
 
 @Injectable()
@@ -50,9 +50,7 @@ export class AwsS3Adapter implements StoragePort {
   }
 
   async delete(key: string): Promise<void> {
-    await this.s3Client.send(
-      new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),
-    );
+    await this.s3Client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
   }
 
   async getPresignedUrl(request: GetPresignedUrlRequest): Promise<string> {

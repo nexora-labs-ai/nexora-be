@@ -2,11 +2,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import {
-  AiPort,
   AiCompletionRequest,
   AiCompletionResponse,
   AiEmbeddingRequest,
   AiEmbeddingResponse,
+  AiPort,
   AiStreamRequest,
 } from '../ports/ai.port';
 
@@ -42,6 +42,7 @@ export class OpenAiAdapter implements AiPort {
     });
 
     const choice = response.choices[0];
+    if (!choice) throw new Error('No choice returned from AI');
 
     return {
       content: choice.message.content ?? '',
@@ -78,6 +79,8 @@ export class OpenAiAdapter implements AiPort {
       model: this.embeddingModel,
       input: request.text,
     });
+
+    if (!response.data[0]) throw new Error('No embedding returned');
 
     return {
       embedding: response.data[0].embedding,

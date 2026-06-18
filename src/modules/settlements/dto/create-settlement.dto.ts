@@ -1,13 +1,13 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
-  IsUUID,
+  IsISO4217CurrencyCode,
   IsNumber,
   IsOptional,
   IsString,
-  IsISO4217CurrencyCode,
-  Min,
+  IsUUID,
   MaxLength,
+  Min,
 } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateSettlementDto {
   @ApiProperty()

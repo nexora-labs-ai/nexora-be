@@ -1,13 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../shared/database/prisma.service';
-import { AuthProvider } from '@prisma/client';
 
 @Injectable()
 export class AuthRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async findRefreshToken(token: string) {
-    return this.prisma.refreshToken.findUnique({
+    return this.prisma.refreshToken.findFirst({
       where: { token },
       include: { user: true },
     });
@@ -17,23 +16,19 @@ export class AuthRepository {
     token: string;
     userId: string;
     expiresAt: Date;
-    ipAddress?: string;
-    userAgent?: string;
   }) {
     return this.prisma.refreshToken.create({ data });
   }
 
   async revokeRefreshToken(token: string) {
-    return this.prisma.refreshToken.update({
+    return this.prisma.refreshToken.deleteMany({
       where: { token },
-      data: { isRevoked: true },
     });
   }
 
   async revokeAllUserTokens(userId: string) {
-    return this.prisma.refreshToken.updateMany({
-      where: { userId, isRevoked: false },
-      data: { isRevoked: true },
+    return this.prisma.refreshToken.deleteMany({
+      where: { userId },
     });
   }
 

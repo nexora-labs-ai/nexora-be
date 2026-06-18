@@ -1,7 +1,7 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { AI_PORT, AiPort } from '../../../shared/infrastructure/ports/ai.port';
-import { MemoryService, ChatMessage } from '../memory/memory.service';
 import { RealtimeService } from '../../../shared/realtime/realtime.service';
+import { ChatMessage, MemoryService } from '../memory/memory.service';
 
 export interface ChatRequest {
   userId: string;
@@ -14,7 +14,8 @@ export interface ChatRequest {
 export class ChatService {
   private readonly logger = new Logger(ChatService.name);
 
-  private readonly systemPrompt = `You are Nexora AI, a friendly financial and travel planning assistant.
+  private readonly systemPrompt =
+    `You are Nexora AI, a friendly financial and travel planning assistant.
 You help groups manage expenses, plan trips, and make smart financial decisions together.
 Be concise, helpful, and proactive with suggestions.
 Always consider the group context when giving advice.`;
@@ -26,10 +27,7 @@ Always consider the group context when giving advice.`;
   ) {}
 
   async chat(request: ChatRequest) {
-    const history = await this.memoryService.getHistory(
-      request.userId,
-      request.groupId,
-    );
+    const history = await this.memoryService.getHistory(request.userId, request.groupId);
 
     // Save user message
     await this.memoryService.appendMessage(

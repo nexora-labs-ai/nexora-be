@@ -1,14 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
+import { AuthProvider, UserRole, UserStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
-import { v4 as uuidv4 } from 'uuid';
 import { addDays } from 'date-fns';
-import { AuthProvider } from '@prisma/client';
-import { AuthRepository } from './auth.repository';
-import { UsersService } from '../users/users.service';
-import { RegisterDto } from './dto/register.dto';
+import { v4 as uuidv4 } from 'uuid';
 import { ConflictError, UnauthorizedError } from '../../shared/common/domain-errors';
+import { UsersService } from '../users/users.service';
+import { AuthRepository } from './auth.repository';
+import { RegisterDto } from './dto/register.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
 
 export interface AuthTokens {
@@ -41,35 +41,34 @@ export class AuthService {
       throw new ConflictError('Email already registered');
     }
 
-    const existingUsername = await this.usersService.findByUsername(dto.username);
-    if (existingUsername) {
-      throw new ConflictError('Username already taken');
-    }
-
     const passwordHash = await bcrypt.hash(dto.password, 12);
     const user = await this.usersService.create({
       email: dto.email,
-      username: dto.username,
       displayName: dto.displayName,
       passwordHash,
       provider: AuthProvider.LOCAL,
     });
 
-    return this.generateTokens(user.id, user.email, user.role);
+    return this.generateTokens(user.id, user.email!, user.role || UserRole.USER);
   }
 
   async validateLocalUser(email: string, password: string) {
     const user = await this.usersService.findByEmail(email);
-    if (!user || !user.passwordHash) {
+    if (!user) {
       throw new UnauthorizedError('Invalid credentials');
     }
 
-    const isValid = await bcrypt.compare(password, user.passwordHash);
+    const localAccount = user.authAccounts.find((a) => a.provider === AuthProvider.LOCAL);
+    if (!localAccount || !localAccount.passwordHash) {
+      throw new UnauthorizedError('Invalid credentials');
+    }
+
+    const isValid = await bcrypt.compare(password, localAccount.passwordHash);
     if (!isValid) {
       throw new UnauthorizedError('Invalid credentials');
     }
 
-    if (!user.isActive) {
+    if (user.status !== UserStatus.ACTIVE) {
       throw new UnauthorizedError('Account is disabled');
     }
 
@@ -86,12 +85,10 @@ export class AuthService {
     if (!user) {
       user = await this.usersService.create({
         email: payload.email,
-        username: payload.email.split('@')[0] + '_' + uuidv4().slice(0, 6),
         displayName: payload.displayName,
         avatarUrl: payload.avatarUrl,
         provider: AuthProvider.GOOGLE,
         providerId: payload.providerId,
-        isEmailVerified: true,
       });
     }
 
@@ -101,24 +98,24 @@ export class AuthService {
   async refreshTokens(token: string): Promise<AuthTokens> {
     const stored = await this.authRepository.findRefreshToken(token);
 
-    if (!stored || stored.isRevoked || stored.expiresAt < new Date()) {
+    if (!stored || !stored.expiresAt || stored.expiresAt < new Date() || !stored.user) {
       throw new UnauthorizedError('Invalid or expired refresh token');
     }
 
     // Rotate: revoke old, issue new
     await this.authRepository.revokeRefreshToken(token);
-    return this.generateTokens(stored.user.id, stored.user.email, stored.user.role);
+    return this.generateTokens(
+      stored.user.id,
+      stored.user.email || '',
+      stored.user.role || UserRole.USER,
+    );
   }
 
   async logout(userId: string): Promise<void> {
     await this.authRepository.revokeAllUserTokens(userId);
   }
 
-  private async generateTokens(
-    userId: string,
-    email: string,
-    role: string,
-  ): Promise<AuthTokens> {
+  private async generateTokens(userId: string, email: string, role: string): Promise<AuthTokens> {
     const payload: JwtPayload = { sub: userId, email, role };
 
     const accessToken = this.jwtService.sign(payload, {

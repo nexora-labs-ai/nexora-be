@@ -1,8 +1,8 @@
 import { Global, Module } from '@nestjs/common';
+import { AwsS3Adapter } from './adapters/aws-s3.adapter';
+import { OpenAiAdapter } from './adapters/openai.adapter';
 import { AI_PORT } from './ports/ai.port';
 import { STORAGE_PORT } from './ports/storage.port';
-import { OpenAiAdapter } from './adapters/openai.adapter';
-import { AwsS3Adapter } from './adapters/aws-s3.adapter';
 
 @Global()
 @Module({

@@ -1,9 +1,9 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
-import { Job } from 'bullmq';
 import { Logger } from '@nestjs/common';
-import { QUEUES, JOB_NAMES } from '../../../shared/queue/queue.constants';
-import { RecommendationAiService } from '../recommendation/recommendation.service';
+import { Job } from 'bullmq';
+import { JOB_NAMES, QUEUES } from '../../../shared/queue/queue.constants';
 import { PlanningService } from '../planning/planning.service';
+import { RecommendationAiService } from '../recommendation/recommendation.service';
 
 @Processor(QUEUES.AI_JOBS)
 export class AiJobsProcessor extends WorkerHost {
@@ -21,9 +21,7 @@ export class AiJobsProcessor extends WorkerHost {
 
     switch (job.name) {
       case JOB_NAMES.GENERATE_RECOMMENDATION:
-        await this.recommendationAiService.generateExpenseRecommendations(
-          job.data.groupId,
-        );
+        await this.recommendationAiService.generateExpenseRecommendations(job.data.groupId);
         break;
 
       case JOB_NAMES.BUDGET_ANALYSIS:

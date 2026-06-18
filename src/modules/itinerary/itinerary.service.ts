@@ -1,11 +1,11 @@
-import { Injectable } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
-import { Queue } from 'bullmq';
-import { PrismaService } from '../../shared/database/prisma.service';
+import { Injectable } from '@nestjs/common';
 import { ItineraryStatus } from '@prisma/client';
+import { Queue } from 'bullmq';
 import { NotFoundError } from '../../shared/common/domain-errors';
+import { PrismaService } from '../../shared/database/prisma.service';
+import { JOB_NAMES, QUEUES } from '../../shared/queue/queue.constants';
 import { CreateItineraryDto } from './dto/create-itinerary.dto';
-import { QUEUES, JOB_NAMES } from '../../shared/queue/queue.constants';
 
 @Injectable()
 export class ItineraryService {
@@ -17,7 +17,7 @@ export class ItineraryService {
   async getGroupItineraries(groupId: string) {
     return this.prisma.itinerary.findMany({
       where: { groupId },
-      include: { items: { orderBy: { order: 'asc' } } },
+      include: { items: { orderBy: { orderNo: 'asc' } } },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -36,13 +36,16 @@ export class ItineraryService {
     });
   }
 
-  async generateAiItinerary(groupId: string, params: {
-    destination: string;
-    duration: number;
-    budget?: number;
-    interests?: string[];
-    requestedBy: string;
-  }) {
+  async generateAiItinerary(
+    groupId: string,
+    params: {
+      destination: string;
+      duration: number;
+      budget?: number;
+      interests?: string[];
+      requestedBy: string;
+    },
+  ) {
     // Queue AI generation job
     await this.aiQueue.add(JOB_NAMES.GENERATE_ITINERARY, {
       groupId,

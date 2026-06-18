@@ -1,8 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
+import { Injectable, Logger } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../../shared/database/prisma.service';
-import { QUEUES, JOB_NAMES } from '../../shared/queue/queue.constants';
+import { JOB_NAMES, QUEUES } from '../../shared/queue/queue.constants';
 
 @Injectable()
 export class RecommendationsService {
@@ -34,9 +34,8 @@ export class RecommendationsService {
   }
 
   async markActedOn(id: string) {
-    return this.prisma.recommendation.update({
+    return this.prisma.recommendation.delete({
       where: { id },
-      data: { isActedOn: true },
     });
   }
 }

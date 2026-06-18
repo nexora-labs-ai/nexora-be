@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { UsersRepository, CreateUserData } from './users.repository';
-import { CacheService } from '../../shared/infrastructure/cache/cache.service';
 import { NotFoundError } from '../../shared/common/domain-errors';
+import { CacheService } from '../../shared/infrastructure/cache/cache.service';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { CreateUserData, UsersRepository } from './users.repository';
 
 @Injectable()
 export class UsersService {
@@ -21,10 +21,6 @@ export class UsersService {
 
   async findByEmail(email: string) {
     return this.usersRepository.findByEmail(email);
-  }
-
-  async findByUsername(username: string) {
-    return this.usersRepository.findByUsername(username);
   }
 
   async create(data: CreateUserData) {

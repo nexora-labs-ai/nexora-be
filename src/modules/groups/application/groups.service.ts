@@ -1,14 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { GroupRole } from '@prisma/client';
-import { GroupsRepository } from '../infrastructure/groups.repository';
+import { NotFoundError } from '../../../shared/common/domain-errors';
+import { CacheService } from '../../../shared/infrastructure/cache/cache.service';
 import { Group } from '../domain/group.entity';
 import { GROUP_EVENTS, GroupCreatedEvent, MemberAddedEvent } from '../domain/group.events';
-import { CacheService } from '../../../shared/infrastructure/cache/cache.service';
-import { NotFoundError } from '../../../shared/common/domain-errors';
+import { GroupsRepository } from '../infrastructure/groups.repository';
+import { AddMemberDto } from '../presentation/add-member.dto';
 import { CreateGroupDto } from '../presentation/create-group.dto';
 import { UpdateGroupDto } from '../presentation/update-group.dto';
-import { AddMemberDto } from '../presentation/add-member.dto';
 
 @Injectable()
 export class GroupsService {
@@ -44,7 +44,7 @@ export class GroupsService {
 
     this.eventEmitter.emit(
       GROUP_EVENTS.CREATED,
-      new GroupCreatedEvent(group.id, createdBy, group.name),
+      new GroupCreatedEvent(group.id, createdBy, group.name ?? ''),
     );
 
     await this.cacheService.del(CacheService.keys.group(group.id));
@@ -110,10 +110,17 @@ export class GroupsService {
 
   private toDomain(data: {
     id: string;
-    name: string;
-    currency: string;
-    members: { userId: string; role: GroupRole }[];
+    name: string | null;
+    currency: string | null;
+    members: { userId: string | null; role: GroupRole | null }[];
   }): Group {
-    return new Group(data.id, data.name, data.currency, data.members);
+    return new Group(
+      data.id,
+      data.name ?? '',
+      data.currency ?? 'USD',
+      data.members
+        .filter((m) => m.userId != null && m.role != null)
+        .map((m) => ({ userId: m.userId as string, role: m.role as GroupRole })),
+    );
   }
 }

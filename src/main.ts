@@ -1,15 +1,15 @@
-import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import compression from 'compression';
 import helmet from 'helmet';
-import * as compression from 'compression';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './shared/common/filters/global-exception.filter';
-import { ResponseInterceptor } from './shared/common/interceptors/response.interceptor';
 import { CorrelationIdInterceptor } from './shared/common/interceptors/correlation-id.interceptor';
+import { ResponseInterceptor } from './shared/common/interceptors/response.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
