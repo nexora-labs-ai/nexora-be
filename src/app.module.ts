@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -20,6 +21,7 @@ import { winstonConfig } from './shared/observability/logging/winston.config';
 import { ObservabilityModule } from './shared/observability/observability.module';
 import { QueueModule } from './shared/queue/queue.module';
 import { RealtimeModule } from './shared/realtime/realtime.module';
+import { JwtAuthGuard } from './shared/common/guards/jwt-auth.guard';
 
 import { AiModule } from './modules/ai/ai.module';
 // Feature Modules
@@ -87,6 +89,12 @@ import { UsersModule } from './modules/users/users.module';
     ItineraryModule,
     RecommendationsModule,
     AiModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
+    },
   ],
 })
 export class AppModule {}

@@ -39,7 +39,10 @@ export class AuthController {
   @Throttle({ strict: { ttl: 60000, limit: 10 } })
   @UseGuards(AuthGuard('local'))
   @ApiOperation({ summary: 'Login with email and password' })
-  login(@Req() req: Request & { user: { id: string; email: string; role: string } }) {
+  login(
+    @Body() dto: LoginDto,
+    @Req() req: Request & { user: { id: string; email: string; role: string } },
+  ) {
     return this.authService.login(req.user.id, req.user.email, req.user.role);
   }
 

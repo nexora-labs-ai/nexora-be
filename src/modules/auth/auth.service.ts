@@ -55,23 +55,28 @@ export class AuthService {
   async validateLocalUser(email: string, password: string) {
     const user = await this.usersService.findByEmail(email);
     if (!user) {
+      this.logger.warn(`Login failed: User with email ${email} not found.`);
       throw new UnauthorizedError('Invalid credentials');
     }
 
     const localAccount = user.authAccounts.find((a) => a.provider === AuthProvider.LOCAL);
     if (!localAccount || !localAccount.passwordHash) {
+      this.logger.warn(`Login failed: User ${email} does not have a local password set (might be Google login).`);
       throw new UnauthorizedError('Invalid credentials');
     }
 
     const isValid = await bcrypt.compare(password, localAccount.passwordHash);
     if (!isValid) {
+      this.logger.warn(`Login failed: Incorrect password provided for ${email}.`);
       throw new UnauthorizedError('Invalid credentials');
     }
 
     if (user.status !== UserStatus.ACTIVE) {
+      this.logger.warn(`Login failed: Account for ${email} is disabled (Status: ${user.status}).`);
       throw new UnauthorizedError('Account is disabled');
     }
 
+    this.logger.log(`User ${email} logged in successfully.`);
     return user;
   }
 
