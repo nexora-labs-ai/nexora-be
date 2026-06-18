@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule } from '@nestjs/throttler';
@@ -14,6 +14,7 @@ import jwtConfig from './shared/config/jwt.config';
 import openaiConfig from './shared/config/openai.config';
 import redisConfig from './shared/config/redis.config';
 
+import { JwtAuthGuard } from './shared/common/guards/jwt-auth.guard';
 import { PrismaModule } from './shared/database/prisma.module';
 import { CacheModule } from './shared/infrastructure/cache/cache.module';
 import { InfrastructureModule } from './shared/infrastructure/infrastructure.module';
@@ -21,7 +22,6 @@ import { winstonConfig } from './shared/observability/logging/winston.config';
 import { ObservabilityModule } from './shared/observability/observability.module';
 import { QueueModule } from './shared/queue/queue.module';
 import { RealtimeModule } from './shared/realtime/realtime.module';
-import { JwtAuthGuard } from './shared/common/guards/jwt-auth.guard';
 
 import { AiModule } from './modules/ai/ai.module';
 // Feature Modules

@@ -2,7 +2,9 @@ pre-commit:
   parallel: false
   commands:
     biome:
-      run: npx biome check --write .
+      glob: "*.{ts,tsx,js,jsx,json}"
+      run: npx biome check --write --no-errors-on-unmatched --files-ignore-unknown=true {staged_files}
+      stage_fixed: true
 
 pre-push:
   parallel: false

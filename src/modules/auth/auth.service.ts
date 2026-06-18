@@ -61,7 +61,9 @@ export class AuthService {
 
     const localAccount = user.authAccounts.find((a) => a.provider === AuthProvider.LOCAL);
     if (!localAccount || !localAccount.passwordHash) {
-      this.logger.warn(`Login failed: User ${email} does not have a local password set (might be Google login).`);
+      this.logger.warn(
+        `Login failed: User ${email} does not have a local password set (might be Google login).`,
+      );
       throw new UnauthorizedError('Invalid credentials');
     }
 
