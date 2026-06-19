@@ -4,6 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import { AuthProvider, UserRole, UserStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { addDays } from 'date-fns';
+import { OAuth2Client } from 'google-auth-library';
 import { v4 as uuidv4 } from 'uuid';
 import { ConflictError, UnauthorizedError } from '../../shared/common/domain-errors';
 import { UsersService } from '../users/users.service';
@@ -27,6 +28,7 @@ export interface GoogleUserPayload {
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
+  private readonly googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
   constructor(
     private readonly authRepository: AuthRepository,
@@ -100,6 +102,33 @@ export class AuthService {
     }
 
     return user;
+  }
+
+  async loginWithGoogleToken(idToken: string): Promise<AuthTokens> {
+    try {
+      const ticket = await this.googleClient.verifyIdToken({
+        idToken,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+
+      const payload = ticket.getPayload();
+      if (!payload || !payload.email) {
+        throw new UnauthorizedError('Invalid Google token');
+      }
+
+      const user = await this.validateGoogleUser({
+        providerId: payload.sub,
+        email: payload.email,
+        displayName: payload.name || 'Google User',
+        avatarUrl: payload.picture,
+      });
+
+      return this.generateTokens(user.id, user.email!, user.role || UserRole.USER);
+    } catch (error) {
+      const err = error as Error;
+      this.logger.error(`Google token verification failed: ${err.message}`, err.stack);
+      throw new UnauthorizedError('Invalid Google token');
+    }
   }
 
   async refreshTokens(token: string): Promise<AuthTokens> {
