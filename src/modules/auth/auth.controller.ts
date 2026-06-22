@@ -16,6 +16,7 @@ import { Request } from 'express';
 import { Public } from '../../shared/common/decorators/auth.decorators';
 import { CurrentUser } from '../../shared/common/decorators/current-user.decorator';
 import { AuthService } from './auth.service';
+import { GoogleTokenDto } from './dto/google-token.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -76,5 +77,14 @@ export class AuthController {
   @ApiOperation({ summary: 'Google OAuth2 callback' })
   googleCallback(@Req() req: Request & { user: { id: string; email: string; role: string } }) {
     return this.authService.login(req.user.id, req.user.email, req.user.role);
+  }
+
+  @Public()
+  @Post('google/token')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ strict: { ttl: 60000, limit: 10 } })
+  @ApiOperation({ summary: 'Login with Google ID Token from mobile app' })
+  googleTokenLogin(@Body() dto: GoogleTokenDto) {
+    return this.authService.loginWithGoogleToken(dto.idToken);
   }
 }

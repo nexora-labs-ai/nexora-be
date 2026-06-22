@@ -31,7 +31,7 @@ async function bootstrap() {
     origin: configService.get<string>('app.corsOrigins')?.split(',') ?? '*',
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Correlation-ID', 'X-API-Key'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Correlation-ID', 'X-API-Key', 'X-Client'],
   });
 
   // API versioning
