@@ -6,7 +6,12 @@ import { Queue } from 'bullmq';
 import { JOB_NAMES, QUEUES } from '../../shared/queue/queue.constants';
 import { RealtimeService } from '../../shared/realtime/realtime.service';
 import { EXPENSE_EVENTS, ExpenseCreatedEvent } from '../expenses/domain/expense.events';
-import { GROUP_EVENTS, MemberAddedEvent } from '../groups/domain/group.events';
+import {
+  GROUP_EVENTS,
+  GroupInvitationRespondedEvent,
+  GroupInvitedEvent,
+  MemberAddedEvent,
+} from '../groups/domain/group.events';
 import { SETTLEMENT_EVENTS } from '../settlements/settlements.service';
 import { NotificationsRepository } from './notifications.repository';
 
@@ -102,5 +107,40 @@ export class NotificationsService {
       title: 'You were added to a group',
       body: 'You have been added to a new group',
     });
+  }
+
+  @OnEvent(GROUP_EVENTS.INVITED)
+  async onGroupInvited(event: GroupInvitedEvent) {
+    await this.sendToUser({
+      userId: event.targetUserId,
+      groupId: event.groupId,
+      type: NotificationType.GROUP_INVITE,
+      title: `Invitation to join ${event.groupName}`,
+      body: `${event.inviterEmail} has invited you to join the group "${event.groupName}".`,
+      payload: { token: event.token },
+    });
+  }
+
+  @OnEvent(GROUP_EVENTS.INVITATION_RESPONDED)
+  async onGroupInvitationResponded(event: GroupInvitationRespondedEvent) {
+    // Find notification by token inside data
+    const res = await this.notificationsRepository.findUserNotifications(event.userId, 1, 100);
+    const notifications = res.data;
+
+    for (const notif of notifications) {
+      if (notif.type === NotificationType.GROUP_INVITE) {
+        const payload = notif.data as any;
+        if (payload?.token === event.token) {
+          // Update payload to include status
+          await this.notificationsRepository.updatePayload(notif.id, {
+            ...payload,
+            status: event.status,
+          });
+
+          // Emit updated notification to user via socket if needed
+          // this.realtimeService.notifyUser(event.userId, updatedNotif);
+        }
+      }
+    }
   }
 }

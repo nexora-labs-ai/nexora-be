@@ -105,4 +105,55 @@ export class GroupsRepository {
       data: { role },
     });
   }
+
+  // --- Invitations ---
+
+  async createInvitation(data: {
+    groupId: string;
+    email: string;
+    invitedBy: string;
+    token: string;
+  }) {
+    return this.prisma.groupInvitation.create({
+      data: {
+        groupId: data.groupId,
+        email: data.email,
+        invitedBy: data.invitedBy,
+        token: data.token,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+      },
+    });
+  }
+
+  async findInvitationByToken(token: string) {
+    return this.prisma.groupInvitation.findUnique({
+      where: { token },
+      include: { group: true },
+    });
+  }
+
+  async acceptInvitation(id: string) {
+    return this.prisma.groupInvitation.update({
+      where: { id },
+      data: { acceptedAt: new Date() },
+    });
+  }
+
+  async deleteInvitation(id: string) {
+    return this.prisma.groupInvitation.delete({
+      where: { id },
+    });
+  }
+
+  async findUserByEmail(email: string) {
+    return this.prisma.user.findUnique({
+      where: { email },
+    });
+  }
+
+  async findUserById(id: string) {
+    return this.prisma.user.findUnique({
+      where: { id },
+    });
+  }
 }

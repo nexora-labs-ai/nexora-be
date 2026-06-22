@@ -62,4 +62,11 @@ export class NotificationsRepository {
   async getUnreadCount(userId: string): Promise<number> {
     return this.prisma.notification.count({ where: { userId, isRead: false } });
   }
+
+  async updatePayload(id: string, payload: any) {
+    return this.prisma.notification.update({
+      where: { id },
+      data: { data: payload },
+    });
+  }
 }
