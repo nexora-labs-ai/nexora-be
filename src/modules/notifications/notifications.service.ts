@@ -16,11 +16,10 @@ import {
 import { SETTLEMENT_EVENTS } from '../settlements/settlements.service';
 import { NotificationsRepository } from './notifications.repository';
 
-export interface GroupInviteNotificationPayload {
+export type GroupInviteNotificationPayload = {
   token: string;
   status?: 'ACCEPTED' | 'REJECTED';
-  [key: string]: Prisma.InputJsonValue | undefined;
-}
+};
 
 @Injectable()
 export class NotificationsService {

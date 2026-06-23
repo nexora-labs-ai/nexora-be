@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import { NotificationType } from '@prisma/client';
+import { NotificationType, Prisma } from '@prisma/client';
 import { buildPaginationMeta, buildPrismaSkipTake } from '../../shared/common/pagination';
 import { PrismaService } from '../../shared/database/prisma.service';
+import { GroupInviteNotificationPayload } from './notifications.service';
 
 @Injectable()
 export class NotificationsRepository {
@@ -18,7 +18,15 @@ export class NotificationsRepository {
       }),
       this.prisma.notification.count({ where }),
     ]);
-    return { data, meta: buildPaginationMeta(total, page, limit) };
+    return {
+      data: data.map((item) => {
+        return {
+          ...item,
+          data: item.data as GroupInviteNotificationPayload,
+        };
+      }),
+      meta: buildPaginationMeta(total, page, limit),
+    };
   }
 
   async create(data: {
