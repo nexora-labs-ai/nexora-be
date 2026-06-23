@@ -10,6 +10,7 @@ import { ConflictError, UnauthorizedError } from '../../shared/common/domain-err
 import { UsersService } from '../users/users.service';
 import { AuthRepository } from './auth.repository';
 import { RegisterDto } from './dto/register.dto';
+import { MezonAuthService } from './mezon-auth.service';
 import { JwtPayload } from './strategies/jwt.strategy';
 
 export interface AuthTokens {
@@ -35,6 +36,7 @@ export class AuthService {
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly mezonAuthService: MezonAuthService,
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthTokens> {
@@ -129,6 +131,31 @@ export class AuthService {
       this.logger.error(`Google token verification failed: ${err.message}`, err.stack);
       throw new UnauthorizedError('Invalid Google token');
     }
+  }
+
+  /**
+   * Orchestrator: Run the entire Mezon OAuth2 flow → Return system JWT
+   */
+  async loginWithMezon(code: string, redirectUri?: string): Promise<AuthTokens> {
+    const resolvedRedirectUri =
+      redirectUri ?? this.configService.get<string>('mezon.redirectUri') ?? '';
+
+    if (!resolvedRedirectUri) {
+      throw new UnauthorizedError(
+        'redirect_uri is required. Provide it in request body or set MEZON_REDIRECT_URI env var.',
+      );
+    }
+
+    const tokenResponse = await this.mezonAuthService.exchangeCodeForToken(
+      code,
+      resolvedRedirectUri,
+    );
+
+    const mezonUserInfo = await this.mezonAuthService.getMezonUserInfo(tokenResponse.access_token);
+
+    const user = await this.mezonAuthService.validateMezonUser(mezonUserInfo);
+
+    return this.login(user.id, user.email ?? '', user.role ?? UserRole.USER);
   }
 
   async refreshTokens(token: string): Promise<AuthTokens> {

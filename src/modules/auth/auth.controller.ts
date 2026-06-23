@@ -11,6 +11,7 @@ import {
   UseGuards,
   Version,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
@@ -30,7 +31,7 @@ import { MezonAuthService } from './mezon-auth.service';
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
-    private readonly mezonAuthService: MezonAuthService,
+    private readonly configService: ConfigService,
   ) {}
 
   @Public()
@@ -78,10 +79,10 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Returns accessToken and refreshToken' })
   @ApiResponse({ status: 401, description: 'Invalid or expired authorization code' })
   mezonLogin(@Body() dto: MezonLoginDto) {
-    return this.mezonAuthService.loginWithMezon(dto.code, dto.redirectUri);
+    return this.authService.loginWithMezon(dto.code, dto.redirectUri);
   }
 
-  // Mồi nhử: Nhận redirect từ Mezon (HTTPS) rồi đá sang Custom Scheme của App (app://)
+  // Proxy: Receive redirect from Mezon (HTTPS) then redirect to App's Custom Scheme (app://)
   @Public()
   @Get('mezon/callback')
   @ApiOperation({ summary: 'Proxy redirect for Mezon OAuth2 to Flutter App' })
@@ -89,8 +90,10 @@ export class AuthController {
     if (!code) {
       return res.status(HttpStatus.BAD_REQUEST).send('Authorization code is missing');
     }
-    // Redirect thẳng về Custom Scheme của app kèm theo code
-    const flutterAppDeepLink = `com.nexora.app://oauth/callback?code=${code}`;
+    // Redirect directly to the app's Custom Scheme with the code attached
+    const mobileCallbackUrl =
+      this.configService.get<string>('MOBILE_OAUTH_CALLBACK') || 'com.nexora.app://oauth/callback';
+    const flutterAppDeepLink = `${mobileCallbackUrl}?code=${code}`;
     return res.redirect(flutterAppDeepLink);
   }
 
