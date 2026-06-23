@@ -16,6 +16,12 @@ import {
 import { SETTLEMENT_EVENTS } from '../settlements/settlements.service';
 import { NotificationsRepository } from './notifications.repository';
 
+export interface GroupInviteNotificationPayload {
+  token: string;
+  status?: 'ACCEPTED' | 'REJECTED';
+  [key: string]: Prisma.InputJsonValue | undefined;
+}
+
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
@@ -130,13 +136,14 @@ export class NotificationsService {
 
     for (const notif of notifications) {
       if (notif.type === NotificationType.GROUP_INVITE) {
-        const payload = notif.data as Prisma.InputJsonObject;
+        const payload = notif.data as GroupInviteNotificationPayload;
         if (payload?.token === event.token) {
           // Update payload to include status
-          await this.notificationsRepository.updatePayload(notif.id, {
+          const newPayload: GroupInviteNotificationPayload = {
             ...payload,
             status: event.status,
-          });
+          };
+          await this.notificationsRepository.updatePayload(notif.id, newPayload);
         }
       }
     }
