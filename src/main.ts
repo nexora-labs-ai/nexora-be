@@ -8,7 +8,6 @@ import helmet from 'helmet';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './shared/common/filters/global-exception.filter';
-import { CorrelationIdInterceptor } from './shared/common/interceptors/correlation-id.interceptor';
 import { ResponseInterceptor } from './shared/common/interceptors/response.interceptor';
 
 async function bootstrap() {
@@ -55,7 +54,7 @@ async function bootstrap() {
   );
 
   // Global interceptors
-  app.useGlobalInterceptors(new CorrelationIdInterceptor(), new ResponseInterceptor());
+  app.useGlobalInterceptors(new ResponseInterceptor());
 
   // Global exception filter
   app.useGlobalFilters(new GlobalExceptionFilter(logger));
@@ -73,7 +72,6 @@ async function bootstrap() {
       .addTag('expenses', 'Expense management')
       .addTag('settlements', 'Settlement management')
       .addTag('notifications', 'Notifications')
-      .addTag('polls', 'Group polls')
       .addTag('itinerary', 'Trip itinerary')
       .addTag('recommendations', 'AI recommendations')
       .addTag('ai', 'AI assistant')
