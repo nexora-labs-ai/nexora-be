@@ -1,8 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AuthProvider, UserRole } from '@prisma/client';
 import { UnauthorizedError } from '../../shared/common/domain-errors';
-import { UsersService } from '../users/users.service';
 
 export interface MezonTokenResponse {
   access_token: string;
@@ -22,10 +20,7 @@ export interface MezonUserInfo {
 export class MezonAuthService {
   private readonly logger = new Logger(MezonAuthService.name);
 
-  constructor(
-    private readonly configService: ConfigService,
-    private readonly usersService: UsersService,
-  ) {}
+  constructor(private readonly configService: ConfigService) {}
 
   /**
    * Step 1: Exchange Authorization Code for Access Token from Mezon
@@ -101,34 +96,5 @@ export class MezonAuthService {
     this.logger.log(`Successfully fetched Mezon user info for sub: ${userInfo.sub}`);
 
     return userInfo;
-  }
-
-  /**
-   * Step 3: Find or create user in DB based on Mezon info
-   * Pattern: Find by email first, if not found then create new with AuthProvider.MEZON
-   */
-  async validateMezonUser(mezonUser: MezonUserInfo) {
-    // If email exists, try to find current user (prevent duplicates with Google/Local accounts)
-    if (mezonUser.email) {
-      const existingUser = await this.usersService.findByEmail(mezonUser.email);
-      if (existingUser) {
-        this.logger.log(
-          `Mezon login: Found existing user by email ${mezonUser.email}, userId: ${existingUser.id}`,
-        );
-        return existingUser;
-      }
-    }
-
-    // Not found → Create new user with MEZON provider
-
-    const newUser = await this.usersService.create({
-      email: mezonUser.email ?? undefined,
-      displayName: mezonUser.name ?? 'Mezon User',
-      avatarUrl: mezonUser.picture,
-      provider: AuthProvider.MEZON,
-      providerId: mezonUser.sub,
-    });
-
-    return newUser;
   }
 }

@@ -10,7 +10,7 @@ import { ConflictError, UnauthorizedError } from '../../shared/common/domain-err
 import { UsersService } from '../users/users.service';
 import { AuthRepository } from './auth.repository';
 import { RegisterDto } from './dto/register.dto';
-import { MezonAuthService } from './mezon-auth.service';
+import { MezonAuthService, MezonUserInfo } from './mezon-auth.service';
 import { JwtPayload } from './strategies/jwt.strategy';
 
 export interface AuthTokens {
@@ -153,9 +153,34 @@ export class AuthService {
 
     const mezonUserInfo = await this.mezonAuthService.getMezonUserInfo(tokenResponse.access_token);
 
-    const user = await this.mezonAuthService.validateMezonUser(mezonUserInfo);
+    const user = await this.validateMezonUser(mezonUserInfo);
 
     return this.login(user.id, user.email ?? '', user.role ?? UserRole.USER);
+  }
+
+  /**
+   * Step 3: Find or create user in DB based on Mezon info
+   * Pattern: Find by email first, if not found then create new with AuthProvider.MEZON
+   */
+  async validateMezonUser(mezonUser: MezonUserInfo) {
+    // If email exists, try to find current user (prevent duplicates with Google/Local accounts)
+    if (mezonUser.email) {
+      const existingUser = await this.usersService.findByEmail(mezonUser.email);
+      if (existingUser) {
+        return existingUser;
+      }
+    }
+
+    // Not found → Create new user with MEZON provider
+    const newUser = await this.usersService.create({
+      email: mezonUser.email ?? undefined,
+      displayName: mezonUser.name ?? 'Mezon User',
+      avatarUrl: mezonUser.picture,
+      provider: AuthProvider.MEZON,
+      providerId: mezonUser.sub,
+    });
+
+    return newUser;
   }
 
   async refreshTokens(token: string): Promise<AuthTokens> {
