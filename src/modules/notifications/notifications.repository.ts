@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { NotificationType } from '@prisma/client';
 import { buildPaginationMeta, buildPrismaSkipTake } from '../../shared/common/pagination';
 import { PrismaService } from '../../shared/database/prisma.service';
@@ -63,7 +64,7 @@ export class NotificationsRepository {
     return this.prisma.notification.count({ where: { userId, isRead: false } });
   }
 
-  async updatePayload(id: string, payload: any) {
+  async updatePayload(id: string, payload: Prisma.InputJsonObject) {
     return this.prisma.notification.update({
       where: { id },
       data: { data: payload },

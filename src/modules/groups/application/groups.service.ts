@@ -4,6 +4,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { GroupRole } from '@prisma/client';
 import { NotFoundError } from '../../../shared/common/domain-errors';
 import { CacheService } from '../../../shared/infrastructure/cache/cache.service';
+import { UsersService } from '../../users/users.service';
 import { Group } from '../domain/group.entity';
 import {
   GROUP_EVENTS,
@@ -24,6 +25,7 @@ export class GroupsService {
 
   constructor(
     private readonly groupsRepository: GroupsRepository,
+    private readonly usersService: UsersService,
     private readonly cacheService: CacheService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
@@ -123,7 +125,7 @@ export class GroupsService {
     const group = this.toDomain(data);
     group.assertMember(requestingUserId); // Owner or member can invite
 
-    const userToInvite = await this.groupsRepository.findUserByEmail(dto.email);
+    const userToInvite = await this.usersService.findByEmail(dto.email);
     if (!userToInvite) {
       throw new Error('User not found with this email'); // Could use a custom DomainError
     }
@@ -132,16 +134,17 @@ export class GroupsService {
       throw new Error('User is already a member of this group');
     }
 
+    const inviter = await this.usersService.findById(requestingUserId);
+    const inviterEmail = inviter?.profile?.displayName ?? inviter?.email ?? 'someone';
+
     const token = crypto.randomBytes(32).toString('hex');
-    const invitation = await this.groupsRepository.createInvitation({
+
+    await this.groupsRepository.createInvitation({
       groupId,
       email: dto.email,
       invitedBy: requestingUserId,
       token,
     });
-
-    const inviter = await this.groupsRepository.findUserById(requestingUserId);
-    const inviterEmail = inviter?.email ?? 'someone';
 
     // Notify user
     this.eventEmitter.emit(
@@ -168,7 +171,7 @@ export class GroupsService {
       throw new Error('Invitation expired');
     }
 
-    const userToInvite = await this.groupsRepository.findUserByEmail(invitation.email!);
+    const userToInvite = await this.usersService.findByEmail(invitation.email!);
     if (!userToInvite || userToInvite.id !== userId) {
       throw new Error('You are not authorized to accept this invitation');
     }
@@ -190,7 +193,7 @@ export class GroupsService {
     const invitation = await this.groupsRepository.findInvitationByToken(token);
     if (!invitation) throw new NotFoundError('Invitation', token);
 
-    const userToInvite = await this.groupsRepository.findUserByEmail(invitation.email!);
+    const userToInvite = await this.usersService.findByEmail(invitation.email!);
     if (!userToInvite || userToInvite.id !== userId) {
       throw new Error('You are not authorized to reject this invitation');
     }

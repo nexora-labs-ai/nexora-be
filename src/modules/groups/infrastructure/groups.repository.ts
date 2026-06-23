@@ -144,16 +144,4 @@ export class GroupsRepository {
       where: { id },
     });
   }
-
-  async findUserByEmail(email: string) {
-    return this.prisma.user.findUnique({
-      where: { email },
-    });
-  }
-
-  async findUserById(id: string) {
-    return this.prisma.user.findUnique({
-      where: { id },
-    });
-  }
 }

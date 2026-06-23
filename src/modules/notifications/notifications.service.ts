@@ -1,6 +1,7 @@
 import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
+import { Prisma } from '@prisma/client';
 import { NotificationType } from '@prisma/client';
 import { Queue } from 'bullmq';
 import { JOB_NAMES, QUEUES } from '../../shared/queue/queue.constants';
@@ -129,16 +130,13 @@ export class NotificationsService {
 
     for (const notif of notifications) {
       if (notif.type === NotificationType.GROUP_INVITE) {
-        const payload = notif.data as any;
+        const payload = notif.data as Prisma.InputJsonObject;
         if (payload?.token === event.token) {
           // Update payload to include status
           await this.notificationsRepository.updatePayload(notif.id, {
             ...payload,
             status: event.status,
           });
-
-          // Emit updated notification to user via socket if needed
-          // this.realtimeService.notifyUser(event.userId, updatedNotif);
         }
       }
     }
