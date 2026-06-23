@@ -7,6 +7,10 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535),
   GOOGLE_CLIENT_ID: z.string().min(1),
   GOOGLE_CLIENT_SECRET: z.string().min(1),
+  // Mezon OAuth2 — optional, only required when Mezon login is used
+  MEZON_CLIENT_ID: z.string().min(1).optional(),
+  MEZON_CLIENT_SECRET: z.string().min(1).optional(),
+  MEZON_REDIRECT_URI: z.string().url().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

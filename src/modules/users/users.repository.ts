@@ -3,7 +3,7 @@ import { AuthProvider, UserRole, UserStatus } from '@prisma/client';
 import { PrismaService } from '../../shared/database/prisma.service';
 
 export interface CreateUserData {
-  email: string;
+  email?: string;
   displayName?: string;
   passwordHash?: string;
   avatarUrl?: string;

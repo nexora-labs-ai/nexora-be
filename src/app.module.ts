@@ -11,6 +11,7 @@ import awsConfig from './shared/config/aws.config';
 import databaseConfig from './shared/config/database.config';
 import { validateEnv } from './shared/config/env.validation';
 import jwtConfig from './shared/config/jwt.config';
+import mezonConfig from './shared/config/mezon.config';
 import openaiConfig from './shared/config/openai.config';
 import redisConfig from './shared/config/redis.config';
 
@@ -39,7 +40,15 @@ import { UsersModule } from './modules/users/users.module';
     // Configuration
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [appConfig, databaseConfig, redisConfig, jwtConfig, awsConfig, openaiConfig],
+      load: [
+        appConfig,
+        databaseConfig,
+        redisConfig,
+        jwtConfig,
+        awsConfig,
+        openaiConfig,
+        mezonConfig,
+      ],
       envFilePath: ['.env.local', '.env'],
       cache: true,
       validate: validateEnv,

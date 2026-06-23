@@ -10,6 +10,7 @@ import { ConflictError, UnauthorizedError } from '../../shared/common/domain-err
 import { UsersService } from '../users/users.service';
 import { AuthRepository } from './auth.repository';
 import { RegisterDto } from './dto/register.dto';
+import { MezonAuthService, MezonUserInfo } from './mezon-auth.service';
 import { JwtPayload } from './strategies/jwt.strategy';
 
 export interface AuthTokens {
@@ -35,6 +36,7 @@ export class AuthService {
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly mezonAuthService: MezonAuthService,
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthTokens> {
@@ -129,6 +131,56 @@ export class AuthService {
       this.logger.error(`Google token verification failed: ${err.message}`, err.stack);
       throw new UnauthorizedError('Invalid Google token');
     }
+  }
+
+  /**
+   * Orchestrator: Run the entire Mezon OAuth2 flow → Return system JWT
+   */
+  async loginWithMezon(code: string, redirectUri?: string): Promise<AuthTokens> {
+    const resolvedRedirectUri =
+      redirectUri ?? this.configService.get<string>('mezon.redirectUri') ?? '';
+
+    if (!resolvedRedirectUri) {
+      throw new UnauthorizedError(
+        'redirect_uri is required. Provide it in request body or set MEZON_REDIRECT_URI env var.',
+      );
+    }
+
+    const tokenResponse = await this.mezonAuthService.exchangeCodeForToken(
+      code,
+      resolvedRedirectUri,
+    );
+
+    const mezonUserInfo = await this.mezonAuthService.getMezonUserInfo(tokenResponse.access_token);
+
+    const user = await this.validateMezonUser(mezonUserInfo);
+
+    return this.login(user.id, user.email ?? '', user.role ?? UserRole.USER);
+  }
+
+  /**
+   * Step 3: Find or create user in DB based on Mezon info
+   * Pattern: Find by email first, if not found then create new with AuthProvider.MEZON
+   */
+  async validateMezonUser(mezonUser: MezonUserInfo) {
+    // If email exists, try to find current user (prevent duplicates with Google/Local accounts)
+    if (mezonUser.email) {
+      const existingUser = await this.usersService.findByEmail(mezonUser.email);
+      if (existingUser) {
+        return existingUser;
+      }
+    }
+
+    // Not found → Create new user with MEZON provider
+    const newUser = await this.usersService.create({
+      email: mezonUser.email ?? undefined,
+      displayName: mezonUser.name ?? 'Mezon User',
+      avatarUrl: mezonUser.picture,
+      provider: AuthProvider.MEZON,
+      providerId: mezonUser.sub,
+    });
+
+    return newUser;
   }
 
   async refreshTokens(token: string): Promise<AuthTokens> {
