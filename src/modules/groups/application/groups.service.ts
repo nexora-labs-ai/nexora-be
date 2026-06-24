@@ -1,5 +1,5 @@
 import * as crypto from 'node:crypto';
-import { Injectable, Logger } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { GroupRole } from '@prisma/client';
 import { NotFoundError } from '../../../shared/common/domain-errors';
@@ -195,7 +195,7 @@ export class GroupsService {
 
     const userToInvite = await this.usersService.findByEmail(invitation.email!);
     if (!userToInvite || userToInvite.id !== userId) {
-      throw new Error('You are not authorized to reject this invitation');
+      throw new ForbiddenException('You are not authorized to reject this invitation');
     }
 
     await this.groupsRepository.deleteInvitation(invitation.id);
