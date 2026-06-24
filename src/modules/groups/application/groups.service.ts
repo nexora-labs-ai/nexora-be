@@ -118,7 +118,9 @@ export class GroupsService {
     const group = this.toDomain(data);
 
     if (targetUserId === requestingUserId) {
-      throw new BusinessRuleError('Use leaveGroup to remove yourself from the group');
+      throw new BusinessRuleError(
+        'You cannot remove yourself from the group. Please leave the group instead.',
+      );
     }
 
     group.assertAdmin(requestingUserId);

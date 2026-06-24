@@ -31,12 +31,12 @@ export class GroupRoleGuard implements CanActivate {
     }
 
     if (!groupId) {
-      return true;
+      throw new ForbiddenError('Group ID is required to verify role');
     }
 
     const group = await this.groupsRepository.findByIdWithMembers(groupId);
     if (!group) {
-      return true;
+      throw new ForbiddenError('Group not found or you do not have access');
     }
 
     const member = group.members.find((m) => m.userId === user.id);
