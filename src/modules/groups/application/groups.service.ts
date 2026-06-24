@@ -2,7 +2,7 @@ import * as crypto from 'node:crypto';
 import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { GroupRole } from '@prisma/client';
-import { NotFoundError } from '../../../shared/common/domain-errors';
+import { BusinessRuleError, NotFoundError } from '../../../shared/common/domain-errors';
 import { CacheService } from '../../../shared/infrastructure/cache/cache.service';
 import { UsersService } from '../../users/users.service';
 import { Group } from '../domain/group.entity';
@@ -12,12 +12,20 @@ import {
   GroupInvitationRespondedEvent,
   GroupInvitedEvent,
   MemberAddedEvent,
+  MemberRemovedEvent,
 } from '../domain/group.events';
 import { GroupsRepository } from '../infrastructure/groups.repository';
 import { AddMemberDto } from '../presentation/add-member.dto';
 import { CreateGroupDto } from '../presentation/create-group.dto';
 import { InviteMemberDto } from '../presentation/invite-member.dto';
 import { UpdateGroupDto } from '../presentation/update-group.dto';
+
+export type GroupPayload = {
+  id: string;
+  name: string | null;
+  currency: string | null;
+  members: { userId: string | null; role: GroupRole | null }[];
+};
 
 @Injectable()
 export class GroupsService {
@@ -109,12 +117,103 @@ export class GroupsService {
 
     const group = this.toDomain(data);
 
-    // Can remove self or admin can remove others
-    if (targetUserId !== requestingUserId) {
-      group.assertAdmin(requestingUserId);
+    if (targetUserId === requestingUserId) {
+      throw new BusinessRuleError('Use leaveGroup to remove yourself from the group');
+    }
+
+    group.assertAdmin(requestingUserId);
+
+    if (group.isOwner(targetUserId)) {
+      throw new BusinessRuleError('Cannot remove the group owner');
     }
 
     await this.groupsRepository.removeMember(groupId, targetUserId);
+
+    this.eventEmitter.emit(
+      GROUP_EVENTS.MEMBER_REMOVED,
+      new MemberRemovedEvent(groupId, targetUserId, requestingUserId),
+    );
+
+    await this.cacheService.del(CacheService.keys.groupMembers(groupId));
+  }
+
+  async leaveGroup(groupId: string, requestingUserId: string) {
+    const data = await this.groupsRepository.findByIdWithMembers(groupId);
+    if (!data) throw new NotFoundError('Group', groupId);
+
+    const group = this.toDomain(data);
+    group.assertMember(requestingUserId);
+
+    if (group.isOwner(requestingUserId)) {
+      const ownersCount = group.members.filter((m) => m.role === GroupRole.OWNER).length;
+      if (ownersCount === 1 && group.members.length > 1) {
+        throw new BusinessRuleError(
+          'You are the only owner. Please promote another member to owner before leaving.',
+        );
+      }
+
+      if (ownersCount === 1 && group.members.length === 1) {
+        await this.groupsRepository.softDelete(groupId);
+      } else {
+        await this.groupsRepository.removeMember(groupId, requestingUserId);
+      }
+    } else {
+      await this.groupsRepository.removeMember(groupId, requestingUserId);
+    }
+
+    this.eventEmitter.emit(
+      GROUP_EVENTS.MEMBER_REMOVED,
+      new MemberRemovedEvent(groupId, requestingUserId, requestingUserId),
+    );
+
+    await this.cacheService.del(CacheService.keys.group(groupId));
+    await this.cacheService.del(CacheService.keys.groupMembers(groupId));
+  }
+
+  async getGroupMembers(groupId: string, requestingUserId: string) {
+    const data = await this.groupsRepository.findById(groupId);
+    if (!data) throw new NotFoundError('Group', groupId);
+
+    const group = this.toDomain(data);
+    group.assertMember(requestingUserId);
+
+    return data.members.map((m) => ({
+      id: m.id,
+      groupId: m.groupId,
+      userId: m.userId,
+      role: m.role,
+      joinedAt: m.joinedAt,
+      user: m.user,
+    }));
+  }
+
+  async updateMemberRole(
+    groupId: string,
+    targetUserId: string,
+    newRole: GroupRole,
+    requestingUserId: string,
+  ) {
+    const data = await this.groupsRepository.findByIdWithMembers(groupId);
+    if (!data) throw new NotFoundError('Group', groupId);
+
+    const group = this.toDomain(data);
+
+    // Checked by guard, but keeping domain check for safety
+    group.assertAdmin(requestingUserId);
+
+    if (targetUserId === requestingUserId && newRole !== GroupRole.OWNER) {
+      throw new BusinessRuleError(
+        'You cannot demote yourself. Ask another owner to do this, or leave the group.',
+      );
+    }
+
+    if (!group.isMember(targetUserId)) {
+      throw new NotFoundError('Member in group', targetUserId);
+    }
+
+    await this.groupsRepository.updateMemberRole(groupId, targetUserId, newRole);
+
+    await this.cacheService.del(CacheService.keys.group(groupId));
     await this.cacheService.del(CacheService.keys.groupMembers(groupId));
   }
 
@@ -127,7 +226,7 @@ export class GroupsService {
 
     const userToInvite = await this.usersService.findByEmail(dto.email);
     if (!userToInvite) {
-      throw new Error('User not found with this email'); // Could use a custom DomainError
+      throw new Error('User not found with this email');
     }
 
     if (group.members.some((m) => m.userId === userToInvite.id)) {
@@ -206,12 +305,7 @@ export class GroupsService {
     );
   }
 
-  private toDomain(data: {
-    id: string;
-    name: string | null;
-    currency: string | null;
-    members: { userId: string | null; role: GroupRole | null }[];
-  }): Group {
+  private toDomain(data: GroupPayload): Group {
     return new Group(
       data.id,
       data.name ?? '',
