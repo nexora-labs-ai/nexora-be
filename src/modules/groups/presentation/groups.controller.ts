@@ -17,6 +17,7 @@ import { PaginationQueryDto } from '../../../shared/common/dtos/pagination-query
 import { GroupsService } from '../application/groups.service';
 import { AddMemberDto } from './add-member.dto';
 import { CreateGroupDto } from './create-group.dto';
+import { InviteMemberDto } from './invite-member.dto';
 import { UpdateGroupDto } from './update-group.dto';
 
 @ApiTags('groups')
@@ -79,5 +80,29 @@ export class GroupsController {
     @CurrentUser('id') userId: string,
   ) {
     return this.groupsService.removeMember(id, memberId, userId);
+  }
+
+  @Post(':id/invitations')
+  @ApiOperation({ summary: 'Invite a member to group by email' })
+  inviteMember(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') userId: string,
+    @Body() dto: InviteMemberDto,
+  ) {
+    return this.groupsService.inviteMember(id, dto, userId);
+  }
+
+  @Post('invitations/:token/accept')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Accept group invitation' })
+  acceptInvitation(@Param('token') token: string, @CurrentUser('id') userId: string) {
+    return this.groupsService.acceptInvitation(token, userId);
+  }
+
+  @Post('invitations/:token/reject')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Reject group invitation' })
+  rejectInvitation(@Param('token') token: string, @CurrentUser('id') userId: string) {
+    return this.groupsService.rejectInvitation(token, userId);
   }
 }

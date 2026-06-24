@@ -1,14 +1,25 @@
 import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
+import { Prisma } from '@prisma/client';
 import { NotificationType } from '@prisma/client';
 import { Queue } from 'bullmq';
 import { JOB_NAMES, QUEUES } from '../../shared/queue/queue.constants';
 import { RealtimeService } from '../../shared/realtime/realtime.service';
 import { EXPENSE_EVENTS, ExpenseCreatedEvent } from '../expenses/domain/expense.events';
-import { GROUP_EVENTS, MemberAddedEvent } from '../groups/domain/group.events';
+import {
+  GROUP_EVENTS,
+  GroupInvitationRespondedEvent,
+  GroupInvitedEvent,
+  MemberAddedEvent,
+} from '../groups/domain/group.events';
 import { SETTLEMENT_EVENTS } from '../settlements/settlements.service';
 import { NotificationsRepository } from './notifications.repository';
+
+export type GroupInviteNotificationPayload = {
+  token: string;
+  status?: 'ACCEPTED' | 'REJECTED';
+};
 
 @Injectable()
 export class NotificationsService {
@@ -102,5 +113,38 @@ export class NotificationsService {
       title: 'You were added to a group',
       body: 'You have been added to a new group',
     });
+  }
+
+  @OnEvent(GROUP_EVENTS.INVITED)
+  async onGroupInvited(event: GroupInvitedEvent) {
+    await this.sendToUser({
+      userId: event.targetUserId,
+      groupId: event.groupId,
+      type: NotificationType.GROUP_INVITE,
+      title: `Invitation to join ${event.groupName}`,
+      body: `${event.inviterEmail} has invited you to join the group "${event.groupName}".`,
+      payload: { token: event.token },
+    });
+  }
+
+  @OnEvent(GROUP_EVENTS.INVITATION_RESPONDED)
+  async onGroupInvitationResponded(event: GroupInvitationRespondedEvent) {
+    // Find notification by token inside data
+    const res = await this.notificationsRepository.findUserNotifications(event.userId, 1, 100);
+    const notifications = res.data;
+
+    for (const notif of notifications) {
+      if (notif.type === NotificationType.GROUP_INVITE) {
+        const payload = notif.data as GroupInviteNotificationPayload;
+        if (payload?.token === event.token) {
+          // Update payload to include status
+          const newPayload: GroupInviteNotificationPayload = {
+            ...payload,
+            status: event.status,
+          };
+          await this.notificationsRepository.updatePayload(notif.id, newPayload);
+        }
+      }
+    }
   }
 }
