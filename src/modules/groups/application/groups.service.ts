@@ -1,9 +1,10 @@
 import * as crypto from 'node:crypto';
-import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { GroupRole } from '@prisma/client';
 import { BusinessRuleError, NotFoundError } from '../../../shared/common/domain-errors';
 import { CacheService } from '../../../shared/infrastructure/cache/cache.service';
+import { STORAGE_PORT, StoragePort } from '../../../shared/infrastructure/ports/storage.port';
 import { UsersService } from '../../users/users.service';
 import { Group } from '../domain/group.entity';
 import {
@@ -23,6 +24,7 @@ import { UpdateGroupDto } from '../presentation/update-group.dto';
 export type GroupPayload = {
   id: string;
   name: string | null;
+  avatarUrl?: string | null;
   currency: string | null;
   members: { userId: string | null; role: GroupRole | null }[];
 };
@@ -36,6 +38,7 @@ export class GroupsService {
     private readonly usersService: UsersService,
     private readonly cacheService: CacheService,
     private readonly eventEmitter: EventEmitter2,
+    @Inject(STORAGE_PORT) private readonly storage: StoragePort,
   ) {}
 
   async getGroup(groupId: string, requestingUserId: string) {
@@ -74,11 +77,57 @@ export class GroupsService {
     if (!data) throw new NotFoundError('Group', groupId);
 
     const group = this.toDomain(data);
-    group.assertAdmin(requestingUserId);
+    group.assertOwner(requestingUserId);
+
+    if (dto.currency && dto.currency !== data.currency) {
+      const hasTransactions = await this.groupsRepository.hasFinancialTransactions(groupId);
+      if (hasTransactions) {
+        throw new BusinessRuleError(
+          'Cannot change group currency after financial transactions have been made',
+        );
+      }
+    }
 
     const updated = await this.groupsRepository.update(groupId, dto);
     await this.cacheService.del(CacheService.keys.group(groupId));
     return updated;
+  }
+
+  async uploadAvatar(groupId: string, file: Express.Multer.File, requestingUserId: string) {
+    const data = await this.groupsRepository.findByIdWithMembers(groupId);
+    if (!data) throw new NotFoundError('Group', groupId);
+
+    const group = this.toDomain(data);
+    group.assertOwner(requestingUserId);
+
+    const key = `groups/${groupId}/avatar-${Date.now()}`;
+
+    const uploadResponse = await this.storage.upload({
+      key,
+      buffer: file.buffer,
+      mimeType: file.mimetype,
+    });
+
+    try {
+      const updated = await this.groupsRepository.update(groupId, {
+        avatarUrl: uploadResponse.url,
+      });
+
+      const oldAvatarKey = data.avatarUrl ? this.extractCloudinaryPublicId(data.avatarUrl) : null;
+      if (oldAvatarKey) {
+        this.storage
+          .delete(oldAvatarKey)
+          .catch((e) => this.logger.error(`Failed to delete old avatar: ${oldAvatarKey}`, e));
+      }
+
+      await this.cacheService.del(CacheService.keys.group(groupId));
+      return updated;
+    } catch (error) {
+      this.storage
+        .delete(uploadResponse.key)
+        .catch((e) => this.logger.error('Failed to rollback avatar', e));
+      throw error;
+    }
   }
 
   async deleteGroup(groupId: string, requestingUserId: string) {
@@ -97,7 +146,7 @@ export class GroupsService {
     if (!data) throw new NotFoundError('Group', groupId);
 
     const group = this.toDomain(data);
-    group.assertAdmin(requestingUserId);
+    group.assertOwner(requestingUserId);
     group.assertCanAddMember();
 
     const member = await this.groupsRepository.addMember(groupId, dto.userId);
@@ -123,7 +172,7 @@ export class GroupsService {
       );
     }
 
-    group.assertAdmin(requestingUserId);
+    group.assertOwner(requestingUserId);
 
     if (group.isOwner(targetUserId)) {
       throw new BusinessRuleError('Cannot remove the group owner');
@@ -200,8 +249,7 @@ export class GroupsService {
 
     const group = this.toDomain(data);
 
-    // Checked by guard, but keeping domain check for safety
-    group.assertAdmin(requestingUserId);
+    group.assertOwner(requestingUserId);
 
     if (targetUserId === requestingUserId && newRole !== GroupRole.OWNER) {
       throw new BusinessRuleError(
@@ -316,5 +364,22 @@ export class GroupsService {
         .filter((m) => m.userId != null && m.role != null)
         .map((m) => ({ userId: m.userId as string, role: m.role as GroupRole })),
     );
+  }
+
+  private extractCloudinaryPublicId(url: string): string | null {
+    try {
+      const parts = url.split('/upload/');
+      if (parts.length !== 2) return null;
+      let path = parts[1];
+      if (!path) return null;
+      path = path.replace(/^v\d+\//, '');
+      const lastDotIndex = path.lastIndexOf('.');
+      if (lastDotIndex !== -1) {
+        path = path.substring(0, lastDotIndex);
+      }
+      return path;
+    } catch {
+      return null;
+    }
   }
 }

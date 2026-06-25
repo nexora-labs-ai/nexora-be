@@ -8,6 +8,7 @@ import { WinstonModule } from 'nest-winston';
 
 import appConfig from './shared/config/app.config';
 import awsConfig from './shared/config/aws.config';
+import cloudinaryConfig from './shared/config/cloudinary.config';
 import databaseConfig from './shared/config/database.config';
 import { validateEnv } from './shared/config/env.validation';
 import jwtConfig from './shared/config/jwt.config';
@@ -48,6 +49,7 @@ import { UsersModule } from './modules/users/users.module';
         awsConfig,
         openaiConfig,
         mezonConfig,
+        cloudinaryConfig,
       ],
       envFilePath: ['.env.local', '.env'],
       cache: true,

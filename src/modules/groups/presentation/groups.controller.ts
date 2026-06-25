@@ -6,12 +6,16 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  ParseFilePipeBuilder,
   ParseUUIDPipe,
   Patch,
   Post,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { GroupRole } from '@prisma/client';
 import { CurrentUser } from '../../../shared/common/decorators/current-user.decorator';
@@ -59,6 +63,26 @@ export class GroupsController {
     @Body() dto: UpdateGroupDto,
   ) {
     return this.groupsService.updateGroup(id, dto, userId);
+  }
+
+  @Post(':id/avatar')
+  @RequireGroupRole(GroupRole.OWNER)
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiOperation({ summary: 'Upload group avatar' })
+  uploadAvatar(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') userId: string,
+    @UploadedFile(
+      new ParseFilePipeBuilder()
+        .addFileTypeValidator({ fileType: /(jpg|jpeg|png|webp)$/ })
+        .addMaxSizeValidator({ maxSize: 15 * 1024 * 1024 })
+        .build({
+          errorHttpStatusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+        }),
+    )
+    file: Express.Multer.File,
+  ) {
+    return this.groupsService.uploadAvatar(id, file, userId);
   }
 
   @Delete(':id')

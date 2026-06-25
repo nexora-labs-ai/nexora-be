@@ -75,7 +75,10 @@ export class GroupsRepository {
     });
   }
 
-  async update(id: string, data: Partial<{ name: string; description: string }>) {
+  async update(
+    id: string,
+    data: Partial<{ name: string; description: string; avatarUrl: string; currency: Currency }>,
+  ) {
     return this.prisma.group.update({ where: { id }, data });
   }
 
@@ -143,5 +146,15 @@ export class GroupsRepository {
     return this.prisma.groupInvitation.delete({
       where: { id },
     });
+  }
+
+  async hasFinancialTransactions(groupId: string): Promise<boolean> {
+    const [expensesCount, settlementsCount, fundTransactionsCount] = await Promise.all([
+      this.prisma.expense.count({ where: { groupId } }),
+      this.prisma.settlement.count({ where: { groupId } }),
+      this.prisma.fundTransaction.count({ where: { fund: { groupId } } }),
+    ]);
+
+    return expensesCount > 0 || settlementsCount > 0 || fundTransactionsCount > 0;
   }
 }
