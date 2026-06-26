@@ -10,18 +10,24 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { GroupRole } from '@prisma/client';
 import { CurrentUser } from '../../../shared/common/decorators/current-user.decorator';
 import { PaginationQueryDto } from '../../../shared/common/dtos/pagination-query.dto';
 import { GroupsService } from '../application/groups.service';
 import { AddMemberDto } from './add-member.dto';
 import { CreateGroupDto } from './create-group.dto';
+import { RequireGroupRole } from './guards/group-role.decorator';
+import { GroupRoleGuard } from './guards/group-role.guard';
 import { InviteMemberDto } from './invite-member.dto';
 import { UpdateGroupDto } from './update-group.dto';
+import { UpdateMemberRoleDto } from './update-member-role.dto';
 
 @ApiTags('groups')
 @ApiBearerAuth()
+@UseGuards(GroupRoleGuard)
 @Controller({ path: 'groups', version: '1' })
 export class GroupsController {
   constructor(private readonly groupsService: GroupsService) {}
@@ -45,6 +51,7 @@ export class GroupsController {
   }
 
   @Patch(':id')
+  @RequireGroupRole(GroupRole.OWNER)
   @ApiOperation({ summary: 'Update group' })
   update(
     @Param('id', ParseUUIDPipe) id: string,
@@ -55,6 +62,7 @@ export class GroupsController {
   }
 
   @Delete(':id')
+  @RequireGroupRole(GroupRole.OWNER)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete group' })
   remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser('id') userId: string) {
@@ -72,6 +80,7 @@ export class GroupsController {
   }
 
   @Delete(':id/members/:memberId')
+  @RequireGroupRole(GroupRole.OWNER)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Remove member from group' })
   removeMember(
@@ -80,6 +89,31 @@ export class GroupsController {
     @CurrentUser('id') userId: string,
   ) {
     return this.groupsService.removeMember(id, memberId, userId);
+  }
+
+  @Get(':id/members')
+  @ApiOperation({ summary: 'Get group members' })
+  getMembers(@Param('id', ParseUUIDPipe) id: string, @CurrentUser('id') userId: string) {
+    return this.groupsService.getGroupMembers(id, userId);
+  }
+
+  @Patch(':id/members/:memberId/role')
+  @RequireGroupRole(GroupRole.OWNER)
+  @ApiOperation({ summary: 'Update member role' })
+  updateMemberRole(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('memberId', ParseUUIDPipe) memberId: string,
+    @CurrentUser('id') userId: string,
+    @Body() dto: UpdateMemberRoleDto,
+  ) {
+    return this.groupsService.updateMemberRole(id, memberId, dto.role, userId);
+  }
+
+  @Post(':id/leave')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Leave group' })
+  leaveGroup(@Param('id', ParseUUIDPipe) id: string, @CurrentUser('id') userId: string) {
+    return this.groupsService.leaveGroup(id, userId);
   }
 
   @Post(':id/invitations')
