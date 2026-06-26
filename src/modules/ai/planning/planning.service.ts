@@ -67,7 +67,7 @@ export class PlanningService {
   constructor(
     private readonly geminiService: GeminiService,
     private readonly prisma: PrismaService,
-  ) {}
+  ) { }
 
   async generateItinerary(params: {
     groupId: string;
