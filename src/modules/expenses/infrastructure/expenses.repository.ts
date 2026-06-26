@@ -72,7 +72,7 @@ export class ExpensesRepository {
           amount: data.amount,
           currency: data.currency as Currency,
           splitType: data.splitType,
-          categoryId: data.categoryId,
+          categoryId: data.categoryId as string,
           date: data.date ?? new Date(),
         },
       });

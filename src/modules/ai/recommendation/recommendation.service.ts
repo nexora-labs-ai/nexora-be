@@ -13,7 +13,7 @@ export class RecommendationAiService {
 
   async generateExpenseRecommendations(groupId: string): Promise<void> {
     // Fetch context data
-    const [expenses, members] = await Promise.all([
+    const [expenses, membersCount, owner] = await Promise.all([
       this.prisma.expense.findMany({
         where: { groupId, deletedAt: null },
         include: { category: true, splits: true },
@@ -21,6 +21,7 @@ export class RecommendationAiService {
         take: 50,
       }),
       this.prisma.groupMember.count({ where: { groupId } }),
+      this.prisma.groupMember.findFirst({ where: { groupId, role: 'OWNER' } }),
     ]);
 
     const totalSpent = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
@@ -36,7 +37,7 @@ export class RecommendationAiService {
     const prompt = `
 Analyze the following group expense data and provide 3-5 actionable recommendations:
 
-Group: ${members} members
+Group: ${membersCount} members
 Total spent: ${totalSpent}
 Spending by category: ${JSON.stringify(byCategory, null, 2)}
 
@@ -69,6 +70,7 @@ Return only valid JSON.`;
     await this.prisma.recommendation.createMany({
       data: recommendations.map((r) => ({
         groupId,
+        createdBy: owner?.userId || '',
         type: (r.type.toUpperCase() as any) || 'ACTIVITY',
         title: r.title,
         content: { body: r.content, priority: r.priority },

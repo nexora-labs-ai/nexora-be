@@ -22,15 +22,16 @@ export class ItineraryService {
     });
   }
 
-  async createItinerary(groupId: string, dto: CreateItineraryDto) {
+  async createItinerary(groupId: string, userId: string, dto: CreateItineraryDto) {
     return this.prisma.itinerary.create({
       data: {
         groupId,
+        createdBy: userId,
         title: dto.title,
         description: dto.description,
-        startDate: dto.startDate ? new Date(dto.startDate) : undefined,
-        endDate: dto.endDate ? new Date(dto.endDate) : undefined,
-        destination: dto.destination,
+        startDate: dto.startDate ? new Date(dto.startDate) : new Date(),
+        endDate: dto.endDate ? new Date(dto.endDate) : new Date(),
+        destination: dto.destination ?? 'Unknown Destination',
         status: ItineraryStatus.DRAFT,
       },
     });

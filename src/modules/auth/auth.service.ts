@@ -91,10 +91,10 @@ export class AuthService {
   }
 
   async validateGoogleUser(payload: GoogleUserPayload) {
-    let user = await this.usersService.findByEmail(payload.email);
+    const user = await this.usersService.findByEmail(payload.email);
 
     if (!user) {
-      user = await this.usersService.create({
+      return this.usersService.create({
         email: payload.email,
         displayName: payload.displayName,
         avatarUrl: payload.avatarUrl,
@@ -173,7 +173,7 @@ export class AuthService {
 
     // Not found → Create new user with MEZON provider
     const newUser = await this.usersService.create({
-      email: mezonUser.email ?? undefined,
+      email: mezonUser.email || `${mezonUser.sub}@mezon.auth`,
       displayName: mezonUser.name ?? 'Mezon User',
       avatarUrl: mezonUser.picture,
       provider: AuthProvider.MEZON,
