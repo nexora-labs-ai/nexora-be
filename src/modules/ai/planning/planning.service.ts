@@ -14,7 +14,7 @@ export class PlanningService {
     @Inject(AI_PORT) private readonly aiPort: AiPort,
     private readonly prisma: PrismaService,
     private readonly realtimeService: RealtimeService,
-  ) {}
+  ) { }
 
   async generateItinerary(params: {
     groupId: string;
@@ -90,8 +90,8 @@ Return as JSON:
               title: item.title,
               description: item.description,
               location: item.location,
-              startTime: new Date(`2024-01-01T${item.startTime || '09:00'}:00Z`),
-              endTime: new Date(`2024-01-01T${item.endTime || '11:00'}:00Z`),
+              startTime: new Date(`1970-01-01T${item.startTime || '09:00'}:00Z`),
+              endTime: new Date(`1970-01-01T${item.endTime || '11:00'}:00Z`),
               estimatedCost: item.estimatedCost,
               orderNo: item.order + (item.day - 1) * 100,
             })),

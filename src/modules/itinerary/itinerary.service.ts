@@ -12,7 +12,7 @@ export class ItineraryService {
   constructor(
     private readonly prisma: PrismaService,
     @InjectQueue(QUEUES.AI_JOBS) private readonly aiQueue: Queue,
-  ) {}
+  ) { }
 
   async getGroupItineraries(groupId: string) {
     return this.prisma.itinerary.findMany({
@@ -22,17 +22,18 @@ export class ItineraryService {
     });
   }
 
-  async createItinerary(groupId: string, dto: CreateItineraryDto, userId: string) {
+  async createItinerary(groupId: string, userId: string, dto: CreateItineraryDto) {
     return this.prisma.itinerary.create({
       data: {
         groupId,
+        createdBy: userId,
         title: dto.title,
         description: dto.description,
         startDate: dto.startDate ? new Date(dto.startDate) : new Date(),
         endDate: dto.endDate ? new Date(dto.endDate) : new Date(),
-        destination: dto.destination || 'Unknown Destination',
+        destination: dto.destination ?? 'Unknown Destination',
         status: ItineraryStatus.DRAFT,
-        createdBy: userId,
+
       },
     });
   }
