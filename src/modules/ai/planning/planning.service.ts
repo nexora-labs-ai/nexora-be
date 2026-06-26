@@ -14,7 +14,7 @@ export class PlanningService {
     @Inject(AI_PORT) private readonly aiPort: AiPort,
     private readonly prisma: PrismaService,
     private readonly realtimeService: RealtimeService,
-  ) {}
+  ) { }
 
   async generateItinerary(params: {
     groupId: string;

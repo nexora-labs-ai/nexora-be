@@ -5,7 +5,7 @@ import { PrismaService } from '../../../shared/database/prisma.service';
 
 @Injectable()
 export class ExpensesRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   async findById(id: string) {
     return this.prisma.expense.findUnique({
@@ -91,7 +91,7 @@ export class ExpensesRepository {
           amount: data.amount,
           currency: data.currency as Currency,
           splitType: data.splitType,
-          categoryId: categoryId,
+          categoryId: data.categoryId as string,
           date: data.date ?? new Date(),
         },
       });

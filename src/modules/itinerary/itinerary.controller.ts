@@ -17,7 +17,7 @@ class GenerateItineraryDto {
 @ApiBearerAuth()
 @Controller({ path: 'itinerary', version: '1' })
 export class ItineraryController {
-  constructor(private readonly itineraryService: ItineraryService) {}
+  constructor(private readonly itineraryService: ItineraryService) { }
 
   @Get()
   @ApiOperation({ summary: 'Get group itineraries' })
