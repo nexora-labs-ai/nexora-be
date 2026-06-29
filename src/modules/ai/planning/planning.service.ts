@@ -1,19 +1,41 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
-import { ItineraryStatus } from '@prisma/client';
-import { NotificationType } from '@prisma/client';
+import { Injectable, Logger } from '@nestjs/common';
+import { ItineraryItem, ItineraryStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../../shared/database/prisma.service';
-import { AI_PORT, AiPort } from '../../../shared/infrastructure/ports/ai.port';
-import { REALTIME_EVENTS } from '../../../shared/realtime/realtime.gateway';
-import { RealtimeService } from '../../../shared/realtime/realtime.service';
+import { GeminiService } from './gemini.service';
+
+export interface AiItineraryItem {
+  day?: number;
+  order?: number;
+  title: string;
+  description?: string;
+  location?: string;
+  startTime?: string;
+  endTime?: string;
+  estimatedCost?: number;
+}
+
+export interface AiItineraryPlan {
+  title?: string;
+  description?: string;
+  items?: AiItineraryItem[];
+}
+
+export interface AiSingleItemUpdate {
+  title: string;
+  description?: string;
+  location?: string;
+  startTime?: string;
+  endTime?: string;
+  estimatedCost?: number;
+}
 
 @Injectable()
 export class PlanningService {
   private readonly logger = new Logger(PlanningService.name);
 
   constructor(
-    @Inject(AI_PORT) private readonly aiPort: AiPort,
+    private readonly geminiService: GeminiService,
     private readonly prisma: PrismaService,
-    private readonly realtimeService: RealtimeService,
   ) {}
 
   async generateItinerary(params: {
@@ -23,7 +45,7 @@ export class PlanningService {
     budget?: number;
     interests?: string[];
     requestedBy: string;
-  }): Promise<void> {
+  }) {
     const prompt = `
 Generate a detailed ${params.duration}-day travel itinerary for ${params.destination}.
 
@@ -32,7 +54,7 @@ Group preferences:
 - Budget: ${params.budget ? `$${params.budget}` : 'flexible'}
 - Interests: ${params.interests?.join(', ') ?? 'general tourism'}
 
-Return as JSON:
+Return exactly a JSON object (no markdown formatting) with the following structure:
 {
   "title": "Itinerary title",
   "description": "Overview",
@@ -50,31 +72,13 @@ Return as JSON:
   ]
 }`;
 
-    const response = await this.aiPort.complete({ userPrompt: prompt, temperature: 0.7 });
+    const plan = await this.geminiService.generateJsonContent<AiItineraryPlan>(prompt);
 
-    let plan: {
-      title: string;
-      description: string;
-      items: Array<{
-        day: number;
-        order: number;
-        title: string;
-        description: string;
-        location: string;
-        startTime?: string;
-        endTime?: string;
-        estimatedCost?: number;
-      }>;
-    };
-
-    try {
-      plan = JSON.parse(response.content);
-    } catch {
-      this.logger.error('Failed to parse AI itinerary response');
-      return;
+    if (!plan || !plan.title || !plan.items) {
+      throw new Error('Failed to parse AI itinerary response: Invalid structure');
     }
 
-    await this.prisma.itinerary.create({
+    return this.prisma.itinerary.create({
       data: {
         groupId: params.groupId,
         title: plan.title,
@@ -86,24 +90,105 @@ Return as JSON:
         createdBy: params.requestedBy,
         items: {
           createMany: {
-            data: plan.items.map((item) => ({
-              title: item.title,
-              description: item.description,
-              location: item.location,
-              startTime: new Date(`1970-01-01T${item.startTime || '09:00'}:00Z`),
-              endTime: new Date(`1970-01-01T${item.endTime || '11:00'}:00Z`),
-              estimatedCost: item.estimatedCost,
-              orderNo: item.order + (item.day - 1) * 100,
-            })),
+            data: plan.items.map((item: AiItineraryItem) => {
+              const startDate = new Date(); // Using today as base
+              const targetDate = new Date(startDate);
+              targetDate.setDate(startDate.getDate() + ((item.day || 1) - 1));
+              const dateStr = targetDate.toISOString().split('T')[0];
+
+              return {
+                title: item.title,
+                description: item.description,
+                location: item.location,
+                startTime: new Date(`${dateStr}T${item.startTime || '09:00'}:00Z`),
+                endTime: new Date(`${dateStr}T${item.endTime || '11:00'}:00Z`),
+                estimatedCost: item.estimatedCost,
+                orderNo: (item.order || 1) + ((item.day || 1) - 1) * 100,
+              };
+            }),
           },
         },
       },
+      include: { items: { orderBy: { orderNo: 'asc' } } },
     });
+  }
 
-    // Notify the group
-    this.realtimeService.emitToGroup(params.groupId, REALTIME_EVENTS.ITINERARY_READY, {
-      groupId: params.groupId,
-      destination: params.destination,
-    });
+  async modifySingleItem(item: ItineraryItem, userPrompt: string) {
+    const prompt = `
+You are an expert travel planner AI.
+The user wants to modify a specific itinerary activity.
+Current Activity Details:
+- Title: ${item.title}
+- Description: ${item.description || 'N/A'}
+- Location: ${item.location || 'N/A'}
+- Start Time: ${item.startTime.toISOString().substring(11, 16)}
+- End Time: ${item.endTime.toISOString().substring(11, 16)}
+- Estimated Cost: ${item.estimatedCost ?? 'N/A'}
+
+User Request: "${userPrompt}"
+
+Based on the user's request, adjust the activity details. Return ONLY a valid JSON object with the exact following structure (do NOT wrap in markdown block):
+{
+  "title": "Updated title",
+  "description": "Updated details",
+  "location": "Updated location",
+  "startTime": "HH:mm",
+  "endTime": "HH:mm",
+  "estimatedCost": 0
+}`;
+
+    const newPlan = await this.geminiService.generateJsonContent<AiSingleItemUpdate>(prompt);
+    if (!newPlan || !newPlan.title) {
+      throw new Error('Failed to parse AI modification response');
+    }
+    return newPlan;
+  }
+
+  async modifyEntireItinerary(
+    itinerary: Prisma.ItineraryGetPayload<{ include: { items: true } }>,
+    userPrompt: string,
+  ) {
+    const currentItemsStr = itinerary.items
+      .map(
+        (i: ItineraryItem) => `
+- Day ${Math.floor(i.orderNo / 100) + 1} | ${i.startTime.toISOString().substring(11, 16)} - ${i.endTime.toISOString().substring(11, 16)}: ${i.title} (Location: ${i.location || 'N/A'}, Cost: ${i.estimatedCost || 0})
+`,
+      )
+      .join('');
+
+    const prompt = `
+You are an expert travel planner AI.
+The user wants to modify their entire itinerary.
+Current Itinerary Overview:
+Title: ${itinerary.title}
+Destination: ${itinerary.destination}
+Activities:
+${currentItemsStr}
+
+User Request: "${userPrompt}"
+
+Please rewrite the itinerary activities to satisfy the user's request. Return ONLY a valid JSON object with the exact following structure (do NOT wrap in markdown block):
+{
+  "items": [
+    {
+      "day": 1,
+      "order": 1,
+      "title": "Activity title",
+      "description": "Details",
+      "location": "Place name",
+      "startTime": "09:00",
+      "endTime": "11:00",
+      "estimatedCost": 50
+    }
+  ]
+}`;
+
+    const newPlan = await this.geminiService.generateJsonContent<{ items: AiItineraryItem[] }>(
+      prompt,
+    );
+    if (!newPlan || !newPlan.items) {
+      throw new Error('Failed to parse AI entire plan modification response');
+    }
+    return newPlan.items;
   }
 }
