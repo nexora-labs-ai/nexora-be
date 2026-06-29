@@ -1,6 +1,11 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiProperty,
+  ApiPropertyOptional,
+  ApiTags,
+} from '@nestjs/swagger';
 import { IsArray, IsNumber, IsOptional, IsString } from 'class-validator';
 import { CurrentUser } from '../../shared/common/decorators/current-user.decorator';
 import { CreateItineraryDto } from './dto/create-itinerary.dto';
@@ -43,6 +48,12 @@ export class ItineraryController {
     @CurrentUser('id') userId: string,
   ) {
     return this.itineraryService.generateAiItinerary(groupId, { ...dto, requestedBy: userId });
+  }
+
+  @Post(':id/ai-edit')
+  @ApiOperation({ summary: 'Edit entire itinerary using AI' })
+  aiEditEntireItinerary(@Param('id', ParseUUIDPipe) id: string, @Body('prompt') prompt: string) {
+    return this.itineraryService.aiEditEntireItinerary(id, prompt);
   }
 
   @Patch(':id/publish')

@@ -63,10 +63,7 @@ Return only valid JSON.`;
       return;
     }
 
-    // Store recommendations
-    const owner = await this.prisma.groupMember.findFirst({
-      where: { groupId, role: 'OWNER' },
-    });
+    // Owner is already fetched at the beginning of the function
     if (!owner) {
       this.logger.error('Cannot generate recommendations without a group owner');
       return;
