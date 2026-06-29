@@ -5,13 +5,13 @@ import { Money } from '../../../shared/common/value-objects/money';
 export interface SplitInput {
   userId: string;
   amount?: number;
-  percentage?: number;
   shares?: number;
 }
 
 export interface SplitResult {
   userId: string;
   amount: number;
+  shares?: number;
 }
 
 export class ExpenseSplitter {
@@ -34,6 +34,7 @@ export class ExpenseSplitter {
     const splits = participants.map((p) => ({
       userId: p.userId,
       amount: p.amount ?? 0,
+      shares: p.shares,
     }));
     const splitTotal = splits.reduce((s, r) => s + r.amount, 0);
 
@@ -48,9 +49,27 @@ export class ExpenseSplitter {
 
   private static splitByShares(total: Money, participants: SplitInput[]): SplitResult[] {
     const totalShares = participants.reduce((s, p) => s + (p.shares ?? 1), 0);
-    return participants.map((p) => ({
-      userId: p.userId,
-      amount: Math.round(total.amount * ((p.shares ?? 1) / totalShares) * 100) / 100,
-    }));
+    const totalCents = Math.round(total.amount * 100);
+    let distributedCents = 0;
+
+    const splits = participants.map((p, index) => {
+      const shares = p.shares ?? 1;
+      let cents = 0;
+
+      if (index === participants.length - 1) {
+        cents = totalCents - distributedCents;
+      } else {
+        cents = Math.round(totalCents * (shares / totalShares));
+        distributedCents += cents;
+      }
+
+      return {
+        userId: p.userId,
+        amount: cents / 100,
+        shares,
+      };
+    });
+
+    return splits;
   }
 }
