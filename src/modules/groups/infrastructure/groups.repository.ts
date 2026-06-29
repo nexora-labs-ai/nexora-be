@@ -16,6 +16,7 @@ export class GroupsRepository {
       where: { id, deletedAt: null },
       include: {
         members: { include: { user: { include: { profile: true } } } },
+        fund: true,
       },
     });
   }
@@ -23,7 +24,7 @@ export class GroupsRepository {
   async findByIdWithMembers(id: string) {
     return this.prisma.group.findUnique({
       where: { id, deletedAt: null },
-      include: { members: true },
+      include: { members: true, fund: true },
     });
   }
 
@@ -42,6 +43,7 @@ export class GroupsRepository {
         where,
         include: {
           members: { where: { userId } },
+          fund: true,
           _count: { select: { members: true, expenses: true } },
         },
         orderBy: { updatedAt: 'desc' },
@@ -70,8 +72,13 @@ export class GroupsRepository {
             role: GroupRole.OWNER,
           },
         },
+        fund: {
+          create: {
+            balance: 0,
+          },
+        },
       },
-      include: { members: true },
+      include: { members: true, fund: true },
     });
   }
 
@@ -142,6 +149,108 @@ export class GroupsRepository {
   async deleteInvitation(id: string) {
     return this.prisma.groupInvitation.delete({
       where: { id },
+    });
+  }
+
+  async contributeFund(groupId: string, userId: string, amount: number, note?: string) {
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Get or create GroupFund
+      let fund = await tx.groupFund.findUnique({
+        where: { groupId },
+      });
+
+      if (!fund) {
+        fund = await tx.groupFund.create({
+          data: {
+            groupId,
+            balance: 0,
+          },
+        });
+      }
+
+      // 2. Update balance
+      const updatedFund = await tx.groupFund.update({
+        where: { id: fund.id },
+        data: {
+          balance: {
+            increment: amount,
+          },
+        },
+      });
+
+      // 3. Create FundTransaction
+      const transaction = await tx.fundTransaction.create({
+        data: {
+          fundId: fund.id,
+          createdBy: userId,
+          type: 'CONTRIBUTION',
+          amount,
+          note,
+        },
+      });
+
+      return { fund: updatedFund, transaction };
+    });
+  }
+
+  async withdrawFund(groupId: string, userId: string, amount: number, note?: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const fund = await tx.groupFund.findUnique({
+        where: { groupId },
+      });
+
+      if (!fund || Number(fund.balance) < amount) {
+        throw new Error('Insufficient group fund balance for withdrawal');
+      }
+
+      const updatedFund = await tx.groupFund.update({
+        where: { id: fund.id },
+        data: {
+          balance: {
+            decrement: amount,
+          },
+        },
+      });
+
+      const transaction = await tx.fundTransaction.create({
+        data: {
+          fundId: fund.id,
+          createdBy: userId,
+          type: 'REFUND',
+          amount,
+          note,
+        },
+      });
+
+      return { fund: updatedFund, transaction };
+    });
+  }
+
+  async findFundTransactions(groupId: string) {
+    const fund = await this.prisma.groupFund.findUnique({
+      where: { groupId },
+      select: { id: true },
+    });
+
+    if (!fund) return [];
+
+    return this.prisma.fundTransaction.findMany({
+      where: { fundId: fund.id },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        creator: {
+          select: {
+            id: true,
+            email: true,
+            profile: {
+              select: {
+                displayName: true,
+                avatarUrl: true,
+              },
+            },
+          },
+        },
+      },
     });
   }
 }

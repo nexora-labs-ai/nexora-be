@@ -16,9 +16,11 @@ import {
 } from '../domain/group.events';
 import { GroupsRepository } from '../infrastructure/groups.repository';
 import { AddMemberDto } from '../presentation/add-member.dto';
+import { ContributeFundDto } from '../presentation/contribute-fund.dto';
 import { CreateGroupDto } from '../presentation/create-group.dto';
 import { InviteMemberDto } from '../presentation/invite-member.dto';
 import { UpdateGroupDto } from '../presentation/update-group.dto';
+import { WithdrawFundDto } from '../presentation/withdraw-fund.dto';
 
 export type GroupPayload = {
   id: string;
@@ -316,5 +318,49 @@ export class GroupsService {
         .filter((m) => m.userId != null && m.role != null)
         .map((m) => ({ userId: m.userId as string, role: m.role as GroupRole })),
     );
+  }
+
+  async contributeFund(groupId: string, dto: ContributeFundDto, requestingUserId: string) {
+    const data = await this.groupsRepository.findByIdWithMembers(groupId);
+    if (!data) throw new NotFoundError('Group', groupId);
+
+    const group = this.toDomain(data);
+    group.assertMember(requestingUserId); // Must be a member to contribute
+
+    const result = await this.groupsRepository.contributeFund(
+      groupId,
+      requestingUserId,
+      dto.amount,
+      dto.note,
+    );
+    await this.cacheService.del(CacheService.keys.group(groupId));
+    return result;
+  }
+
+  async withdrawFund(groupId: string, dto: WithdrawFundDto, requestingUserId: string) {
+    const data = await this.groupsRepository.findByIdWithMembers(groupId);
+    if (!data) throw new NotFoundError('Group', groupId);
+
+    const group = this.toDomain(data);
+    group.assertAdmin(requestingUserId); // Only admin/owner can withdraw fund
+
+    const result = await this.groupsRepository.withdrawFund(
+      groupId,
+      requestingUserId,
+      dto.amount,
+      dto.note,
+    );
+    await this.cacheService.del(CacheService.keys.group(groupId));
+    return result;
+  }
+
+  async getFundTransactions(groupId: string, requestingUserId: string) {
+    const data = await this.groupsRepository.findByIdWithMembers(groupId);
+    if (!data) throw new NotFoundError('Group', groupId);
+
+    const group = this.toDomain(data);
+    group.assertMember(requestingUserId); // Must be a member to view transactions
+
+    return this.groupsRepository.findFundTransactions(groupId);
   }
 }
