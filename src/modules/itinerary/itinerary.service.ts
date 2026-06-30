@@ -95,17 +95,13 @@ export class ItineraryService {
       throw new NotFoundError('ItineraryItem', itemId);
     }
 
-    let deltaMs = 0;
-    // Calculate delta if endTime changes, to shift subsequent items
+    let deltaEndMs = 0;
+    let deltaStartMs = 0;
     if (dto.endTime) {
-      const newEndTime = new Date(dto.endTime).getTime();
-      const oldEndTime = item.endTime.getTime();
-      deltaMs = newEndTime - oldEndTime;
-    } else if (dto.startTime && !dto.endTime) {
-      // If only startTime changed but duration is same, shift by startTime difference
-      const newStartTime = new Date(dto.startTime).getTime();
-      const oldStartTime = item.startTime.getTime();
-      deltaMs = newStartTime - oldStartTime;
+      deltaEndMs = new Date(dto.endTime).getTime() - item.endTime.getTime();
+    }
+    if (dto.startTime) {
+      deltaStartMs = new Date(dto.startTime).getTime() - item.startTime.getTime();
     }
 
     const updatedItem = await this.prisma.itineraryItem.update({
@@ -122,15 +118,25 @@ export class ItineraryService {
       },
     });
 
-    if (deltaMs !== 0) {
-      // Shift all subsequent items
-      const intervalStr = `${deltaMs} milliseconds`;
+    if (deltaEndMs !== 0) {
+      const intervalStr = `${deltaEndMs} milliseconds`;
       await this.prisma.$executeRaw`
         UPDATE "itinerary_items"
         SET "startTime" = "startTime" + ${intervalStr}::interval,
             "endTime" = "endTime" + ${intervalStr}::interval
         WHERE "itinerary_id" = ${itineraryId}::uuid
           AND "order_no" > ${item.orderNo}
+      `;
+    }
+
+    if (deltaStartMs !== 0) {
+      const intervalStr = `${deltaStartMs} milliseconds`;
+      await this.prisma.$executeRaw`
+        UPDATE "itinerary_items"
+        SET "startTime" = "startTime" + ${intervalStr}::interval,
+            "endTime" = "endTime" + ${intervalStr}::interval
+        WHERE "itinerary_id" = ${itineraryId}::uuid
+          AND "order_no" < ${item.orderNo}
       `;
     }
 
@@ -166,39 +172,43 @@ export class ItineraryService {
     const item = await this.prisma.itineraryItem.findUnique({ where: { id: itemId } });
     if (!item || item.itineraryId !== itineraryId) throw new NotFoundError('ItineraryItem', itemId);
 
-    const newFields = await this.planningService.modifySingleItem(item, prompt);
+    const itinerary = await this.prisma.itinerary.findUnique({
+      where: { id: itineraryId },
+      include: { items: { orderBy: { orderNo: 'asc' } } },
+    });
+    if (!itinerary) throw new NotFoundError('Itinerary', itineraryId);
 
-    const dto: UpdateItineraryItemDto = {
-      title: newFields.title,
-      description: newFields.description,
-      location: newFields.location,
-      estimatedCost: newFields.estimatedCost,
-    };
+    const newItems = await this.planningService.modifyEntireItinerary(
+      itinerary,
+      prompt,
+      item.title,
+    );
 
-    if (newFields.startTime) {
-      const parts = newFields.startTime.split(':');
-      const start = new Date(item.startTime);
-      start.setUTCHours(
-        Number.parseInt(parts[0] || '0', 10),
-        Number.parseInt(parts[1] || '0', 10),
-        0,
-        0,
-      );
-      dto.startTime = start.toISOString();
-    }
-    if (newFields.endTime) {
-      const parts = newFields.endTime.split(':');
-      const end = new Date(item.endTime);
-      end.setUTCHours(
-        Number.parseInt(parts[0] || '0', 10),
-        Number.parseInt(parts[1] || '0', 10),
-        0,
-        0,
-      );
-      dto.endTime = end.toISOString();
-    }
+    await this.prisma.$transaction(async (tx) => {
+      await tx.itineraryItem.deleteMany({ where: { itineraryId } });
 
-    return this.updateItineraryItem(itineraryId, itemId, dto);
+      await tx.itineraryItem.createMany({
+        data: newItems.map((aiItem: AiItineraryItem) => {
+          const startDate = itinerary.startDate ? new Date(itinerary.startDate) : new Date();
+          const targetDate = new Date(startDate);
+          targetDate.setDate(startDate.getDate() + ((aiItem.day || 1) - 1));
+          const dateStr = targetDate.toISOString().split('T')[0];
+
+          return {
+            itineraryId,
+            title: aiItem.title,
+            description: aiItem.description,
+            location: aiItem.location,
+            startTime: new Date(`${dateStr}T${aiItem.startTime || '09:00'}:00Z`),
+            endTime: new Date(`${dateStr}T${aiItem.endTime || '11:00'}:00Z`),
+            estimatedCost: aiItem.estimatedCost,
+            orderNo: (aiItem.order || 1) + ((aiItem.day || 1) - 1) * 100,
+          };
+        }),
+      });
+    });
+
+    return { success: true };
   }
 
   async aiEditEntireItinerary(itineraryId: string, prompt: string) {
