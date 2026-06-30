@@ -245,10 +245,32 @@ export class AuthService {
       expiresAt,
     });
 
+    const expiresInConfig = this.configService.get<string>('jwt.accessExpiresIn') || '15m';
+    const expiresIn = this.parseDuration(expiresInConfig);
+
     return {
       accessToken,
       refreshToken,
-      expiresIn: 900, // 15 minutes
+      expiresIn,
     };
+  }
+
+  private parseDuration(duration: string): number {
+    const match = duration.match(/^(\d+)([smhd])$/);
+    if (!match) return 900;
+    const value = Number.parseInt(match[1], 10);
+    const unit = match[2];
+    switch (unit) {
+      case 's':
+        return value;
+      case 'm':
+        return value * 60;
+      case 'h':
+        return value * 3600;
+      case 'd':
+        return value * 86400;
+      default:
+        return 900;
+    }
   }
 }
