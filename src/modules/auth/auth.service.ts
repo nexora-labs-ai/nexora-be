@@ -170,7 +170,7 @@ export class AuthService {
 
     // Not found → Create new user with MEZON provider
     const newUser = await this.usersService.create({
-      email: mezonUser.email ?? undefined,
+      email: mezonUser.email ?? 'Mezon Email',
       displayName: mezonUser.name ?? 'Mezon User',
       avatarUrl: mezonUser.picture,
       provider: AuthProvider.MEZON,

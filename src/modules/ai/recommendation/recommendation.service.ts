@@ -73,6 +73,7 @@ Return only valid JSON.`;
         title: r.title,
         content: { body: r.content, priority: r.priority },
         expiresAt,
+        createdBy: 'system',
       })),
     });
   }

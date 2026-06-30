@@ -57,7 +57,7 @@ export class ExpensesRepository {
       amount: number;
       currency: string;
       splitType: ExpenseSplitType;
-      categoryId?: string;
+      categoryId: string;
       date?: Date;
     },
     splits: { userId: string; amount: number; percentage?: number; shares?: number }[],
