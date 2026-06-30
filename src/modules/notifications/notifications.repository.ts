@@ -49,9 +49,16 @@ export class NotificationsRepository {
       type: NotificationType;
       title: string;
       body: string;
+      data?: Record<string, unknown>;
     }[],
   ) {
-    return this.prisma.notification.createMany({ data: notifications });
+    return this.prisma.$transaction(
+      notifications.map((n) =>
+        this.prisma.notification.create({
+          data: { ...n, data: n.data as object | undefined },
+        }),
+      ),
+    );
   }
 
   async markAsRead(id: string, userId: string) {

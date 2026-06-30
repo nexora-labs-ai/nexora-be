@@ -84,6 +84,7 @@ export class NotificationsService {
         title: 'New expense added',
         body: `A new expense of ${event.currency} ${event.amount} was added to your group`,
         groupId: event.groupId,
+        data: { expenseId: event.expenseId },
       });
     } catch (error) {
       this.logger.error(
