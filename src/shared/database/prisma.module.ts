@@ -25,9 +25,9 @@ const prismaProvider = {
               ) {
                 args.where = { ...args.where, deletedAt: null };
               } else if (operation === 'findUnique' || operation === 'findUniqueOrThrow') {
-                const context = Prisma.getExtensionContext(this) as any;
                 const newOp = operation === 'findUnique' ? 'findFirst' : 'findFirstOrThrow';
-                return context[model][newOp]({
+                const delegateName = model.charAt(0).toLowerCase() + model.slice(1);
+                return (baseClient as any)[delegateName][newOp]({
                   ...args,
                   where: { ...args.where, deletedAt: null },
                 });
