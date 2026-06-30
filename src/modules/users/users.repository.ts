@@ -35,6 +35,31 @@ export class UsersRepository {
     });
   }
 
+  async findByProvider(provider: AuthProvider, providerId: string) {
+    return this.prisma.user.findFirst({
+      where: {
+        deletedAt: null,
+        authAccounts: {
+          some: { provider, providerUserId: providerId },
+        },
+      },
+      include: {
+        profile: true,
+        authAccounts: true,
+      },
+    });
+  }
+
+  async linkAuthAccount(userId: string, provider: AuthProvider, providerId: string) {
+    return this.prisma.userAuthAccount.create({
+      data: {
+        userId,
+        provider,
+        providerUserId: providerId,
+      },
+    });
+  }
+
   async create(data: CreateUserData) {
     return this.prisma.user.create({
       data: {
