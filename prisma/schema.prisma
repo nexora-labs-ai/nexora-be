@@ -358,6 +358,7 @@ model Settlement {
   fromUser User  @relation("SettlementFrom", fields: [fromUserId], references: [id])
   toUser   User  @relation("SettlementTo", fields: [toUserId], references: [id])
 
+  @@index([groupId, fromUserId, toUserId, status])
   @@map("settlements")
 }
 
