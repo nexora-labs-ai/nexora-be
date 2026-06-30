@@ -76,75 +76,110 @@ export class NotificationsService {
 
   @OnEvent(EXPENSE_EVENTS.CREATED)
   async onExpenseCreated(event: ExpenseCreatedEvent) {
-    // Queue notification job for split participants
-    await this.notificationsQueue.add(JOB_NAMES.SEND_BULK_NOTIFICATIONS, {
-      type: NotificationType.EXPENSE_CREATED,
-      userIds: event.splitUserIds.filter((id) => id !== event.payerId),
-      title: 'New expense added',
-      body: `A new expense of ${event.currency} ${event.amount} was added to your group`,
-      groupId: event.groupId,
-    });
+    try {
+      // Queue notification job for split participants
+      await this.notificationsQueue.add(JOB_NAMES.SEND_BULK_NOTIFICATIONS, {
+        type: NotificationType.EXPENSE_CREATED,
+        userIds: event.splitUserIds.filter((id) => id !== event.payerId),
+        title: 'New expense added',
+        body: `A new expense of ${event.currency} ${event.amount} was added to your group`,
+        groupId: event.groupId,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to handle EXPENSE_EVENTS.CREATED: ${(error as Error).message}`,
+        (error as Error).stack,
+      );
+    }
   }
 
   @OnEvent(SETTLEMENT_EVENTS.COMPLETED)
   async onSettlementCompleted(event: unknown) {
-    const settlement = event as {
-      toUserId: string;
-      fromUserId: string;
-      groupId: string;
-      amount: number;
-      currency: string;
-    };
-    await this.sendToUser({
-      userId: settlement.fromUserId,
-      groupId: settlement.groupId,
-      type: NotificationType.SETTLEMENT_COMPLETED,
-      title: 'Settlement confirmed',
-      body: `Your payment of ${settlement.currency} ${settlement.amount} has been confirmed`,
-    });
+    try {
+      const settlement = event as {
+        toUserId: string;
+        fromUserId: string;
+        groupId: string;
+        amount: number;
+        currency: string;
+      };
+      await this.sendToUser({
+        userId: settlement.fromUserId,
+        groupId: settlement.groupId,
+        type: NotificationType.SETTLEMENT_COMPLETED,
+        title: 'Settlement confirmed',
+        body: `Your payment of ${settlement.currency} ${settlement.amount} has been confirmed`,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to handle SETTLEMENT_EVENTS.COMPLETED: ${(error as Error).message}`,
+        (error as Error).stack,
+      );
+    }
   }
 
   @OnEvent(GROUP_EVENTS.MEMBER_ADDED)
   async onMemberAdded(event: MemberAddedEvent) {
-    await this.sendToUser({
-      userId: event.addedUserId,
-      groupId: event.groupId,
-      type: NotificationType.GROUP_INVITE,
-      title: 'You were added to a group',
-      body: 'You have been added to a new group',
-    });
+    try {
+      await this.sendToUser({
+        userId: event.addedUserId,
+        groupId: event.groupId,
+        type: NotificationType.GROUP_INVITE,
+        title: 'You were added to a group',
+        body: 'You have been added to a new group',
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to handle GROUP_EVENTS.MEMBER_ADDED: ${(error as Error).message}`,
+        (error as Error).stack,
+      );
+    }
   }
 
   @OnEvent(GROUP_EVENTS.INVITED)
   async onGroupInvited(event: GroupInvitedEvent) {
-    await this.sendToUser({
-      userId: event.targetUserId,
-      groupId: event.groupId,
-      type: NotificationType.GROUP_INVITE,
-      title: `Invitation to join ${event.groupName}`,
-      body: `${event.inviterEmail} has invited you to join the group "${event.groupName}".`,
-      payload: { token: event.token },
-    });
+    try {
+      await this.sendToUser({
+        userId: event.targetUserId,
+        groupId: event.groupId,
+        type: NotificationType.GROUP_INVITE,
+        title: `Invitation to join ${event.groupName}`,
+        body: `${event.inviterEmail} has invited you to join the group "${event.groupName}".`,
+        payload: { token: event.token },
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to handle GROUP_EVENTS.INVITED: ${(error as Error).message}`,
+        (error as Error).stack,
+      );
+    }
   }
 
   @OnEvent(GROUP_EVENTS.INVITATION_RESPONDED)
   async onGroupInvitationResponded(event: GroupInvitationRespondedEvent) {
-    // Find notification by token inside data
-    const res = await this.notificationsRepository.findUserNotifications(event.userId, 1, 100);
-    const notifications = res.data;
+    try {
+      // Find notification by token inside data
+      const res = await this.notificationsRepository.findUserNotifications(event.userId, 1, 100);
+      const notifications = res.data;
 
-    for (const notif of notifications) {
-      if (notif.type === NotificationType.GROUP_INVITE) {
-        const payload = notif.data as GroupInviteNotificationPayload;
-        if (payload?.token === event.token) {
-          // Update payload to include status
-          const newPayload: GroupInviteNotificationPayload = {
-            ...payload,
-            status: event.status,
-          };
-          await this.notificationsRepository.updatePayload(notif.id, newPayload);
+      for (const notif of notifications) {
+        if (notif.type === NotificationType.GROUP_INVITE) {
+          const payload = notif.data as GroupInviteNotificationPayload;
+          if (payload?.token === event.token) {
+            // Update payload to include status
+            const newPayload: GroupInviteNotificationPayload = {
+              ...payload,
+              status: event.status,
+            };
+            await this.notificationsRepository.updatePayload(notif.id, newPayload);
+          }
         }
       }
+    } catch (error) {
+      this.logger.error(
+        `Failed to handle GROUP_EVENTS.INVITATION_RESPONDED: ${(error as Error).message}`,
+        (error as Error).stack,
+      );
     }
   }
 }
