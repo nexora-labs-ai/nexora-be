@@ -147,6 +147,7 @@ Based on the user's request, adjust the activity details. Return ONLY a valid JS
   async modifyEntireItinerary(
     itinerary: Prisma.ItineraryGetPayload<{ include: { items: true } }>,
     userPrompt: string,
+    focusedItemTitle?: string,
   ) {
     const currentItemsStr = itinerary.items
       .map(
@@ -156,9 +157,13 @@ Based on the user's request, adjust the activity details. Return ONLY a valid JS
       )
       .join('');
 
+    const contextInstruction = focusedItemTitle
+      ? `\nNote: The user triggered this request while focusing on the activity: "${focusedItemTitle}". You may modify, delete, or shift this activity and any surrounding activities to fulfill the request.`
+      : '';
+
     const prompt = `
 You are an expert travel planner AI.
-The user wants to modify their entire itinerary.
+The user wants to modify their entire itinerary.${contextInstruction}
 Current Itinerary Overview:
 Title: ${itinerary.title}
 Destination: ${itinerary.destination}
