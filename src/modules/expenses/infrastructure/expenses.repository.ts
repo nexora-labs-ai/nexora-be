@@ -63,6 +63,13 @@ export class ExpensesRepository {
     splits: { userId: string; amount: number; percentage?: number; shares?: number }[],
   ) {
     return this.prisma.$transaction(async (tx) => {
+      let categoryId = data.categoryId;
+      if (!categoryId) {
+        const defaultCategory = await tx.category.findFirst({ where: { isDefault: true } });
+        if (defaultCategory) categoryId = defaultCategory.id;
+        else throw new Error('No default category found');
+      }
+
       const expense = await tx.expense.create({
         data: {
           groupId: data.groupId,
@@ -72,7 +79,7 @@ export class ExpensesRepository {
           amount: data.amount,
           currency: data.currency as Currency,
           splitType: data.splitType,
-          categoryId: data.categoryId,
+          categoryId: categoryId,
           date: data.date ?? new Date(),
         },
       });

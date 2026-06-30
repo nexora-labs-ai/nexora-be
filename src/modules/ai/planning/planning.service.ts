@@ -62,6 +62,8 @@ Return as JSON:
         description: string;
         location: string;
         estimatedCost?: number;
+        startTime?: string;
+        endTime?: string;
       }>;
     };
 
@@ -78,6 +80,8 @@ Return as JSON:
         title: plan.title,
         description: plan.description,
         destination: params.destination,
+        startDate: new Date(),
+        endDate: new Date(Date.now() + params.duration * 24 * 60 * 60 * 1000),
         status: ItineraryStatus.DRAFT,
         createdBy: params.requestedBy,
         items: {
@@ -88,6 +92,8 @@ Return as JSON:
               location: item.location,
               estimatedCost: item.estimatedCost,
               orderNo: item.order + (item.day - 1) * 100,
+              startTime: new Date(`1970-01-01T${item.startTime || '09:00'}:00Z`),
+              endTime: new Date(`1970-01-01T${item.endTime || '10:00'}:00Z`),
             })),
           },
         },
