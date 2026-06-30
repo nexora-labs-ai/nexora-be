@@ -1,3 +1,4 @@
+import * as crypto from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -5,7 +6,6 @@ import { AuthProvider, UserRole, UserStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { addDays } from 'date-fns';
 import { OAuth2Client } from 'google-auth-library';
-import { v4 as uuidv4 } from 'uuid';
 import { ConflictError, UnauthorizedError } from '../../shared/common/domain-errors';
 import { UsersService } from '../users/users.service';
 import { AuthRepository } from './auth.repository';
@@ -91,19 +91,18 @@ export class AuthService {
   }
 
   async validateGoogleUser(payload: GoogleUserPayload) {
-    let user = await this.usersService.findByEmail(payload.email);
-
-    if (!user) {
-      user = await this.usersService.create({
-        email: payload.email,
-        displayName: payload.displayName,
-        avatarUrl: payload.avatarUrl,
-        provider: AuthProvider.GOOGLE,
-        providerId: payload.providerId,
-      });
+    const existingUser = await this.usersService.findByEmail(payload.email);
+    if (existingUser) {
+      return existingUser;
     }
 
-    return user;
+    return this.usersService.create({
+      email: payload.email,
+      displayName: payload.displayName,
+      avatarUrl: payload.avatarUrl,
+      provider: AuthProvider.GOOGLE,
+      providerId: payload.providerId,
+    });
   }
 
   async loginWithGoogleToken(idToken: string): Promise<AuthTokens> {
@@ -173,7 +172,7 @@ export class AuthService {
 
     // Not found → Create new user with MEZON provider
     const newUser = await this.usersService.create({
-      email: mezonUser.email ?? undefined,
+      email: mezonUser.email ?? `${mezonUser.sub}@mezon.provider`,
       displayName: mezonUser.name ?? 'Mezon User',
       avatarUrl: mezonUser.picture,
       provider: AuthProvider.MEZON,
@@ -184,14 +183,15 @@ export class AuthService {
   }
 
   async refreshTokens(token: string): Promise<AuthTokens> {
-    const stored = await this.authRepository.findRefreshToken(token);
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+    const stored = await this.authRepository.findRefreshToken(hashedToken);
 
     if (!stored || !stored.expiresAt || stored.expiresAt < new Date() || !stored.user) {
       throw new UnauthorizedError('Invalid or expired refresh token');
     }
 
     // Rotate: revoke old, issue new
-    await this.authRepository.revokeRefreshToken(token);
+    await this.authRepository.revokeRefreshToken(hashedToken);
     return this.generateTokens(
       stored.user.id,
       stored.user.email || '',
@@ -211,11 +211,12 @@ export class AuthService {
       expiresIn: this.configService.get<string>('jwt.accessExpiresIn'),
     });
 
-    const refreshToken = uuidv4();
+    const refreshToken = crypto.randomBytes(32).toString('hex');
+    const hashedToken = crypto.createHash('sha256').update(refreshToken).digest('hex');
     const expiresAt = addDays(new Date(), 7);
 
     await this.authRepository.createRefreshToken({
-      token: refreshToken,
+      token: hashedToken,
       userId,
       expiresAt,
     });
