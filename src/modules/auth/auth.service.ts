@@ -207,7 +207,15 @@ export class AuthService {
     }
 
     // Rotate: revoke old, issue new
-    await this.authRepository.revokeRefreshToken(hashedToken);
+    const deleteResult = await this.authRepository.revokeRefreshToken(hashedToken);
+
+    if (deleteResult.count === 0) {
+      // Token reuse detected or race condition lost
+      await this.authRepository.revokeAllUserTokens(stored.user.id);
+      this.logger.warn(`Token reuse detected for user ${stored.user.id}. All sessions revoked.`);
+      throw new UnauthorizedError('Token reuse detected. All sessions revoked for security.');
+    }
+
     return this.generateTokens(
       stored.user.id,
       stored.user.email || '',
