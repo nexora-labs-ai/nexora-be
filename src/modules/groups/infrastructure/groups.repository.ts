@@ -15,7 +15,10 @@ export class GroupsRepository {
     return this.prisma.group.findUnique({
       where: { id, deletedAt: null },
       include: {
-        members: { include: { user: { include: { profile: true } } } },
+        members: {
+          where: { leftAt: null },
+          include: { user: { include: { profile: true } } },
+        },
       },
     });
   }
@@ -23,7 +26,7 @@ export class GroupsRepository {
   async findByIdWithMembers(id: string) {
     return this.prisma.group.findUnique({
       where: { id, deletedAt: null },
-      include: { members: true },
+      include: { members: { where: { leftAt: null } } },
     });
   }
 

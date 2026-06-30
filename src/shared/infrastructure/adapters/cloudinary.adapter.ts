@@ -22,10 +22,19 @@ export class CloudinaryAdapter implements StoragePort {
   }
 
   async upload(request: UploadFileRequest): Promise<UploadFileResponse> {
+    const ALLOWED = ['image/jpeg', 'image/png', 'image/webp'];
+    if (request.mimeType && !ALLOWED.includes(request.mimeType)) {
+      return Promise.reject(new Error(`Unsupported mime type: ${request.mimeType}`));
+    }
+
     return new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         {
           public_id: request.key,
+          folder: 'nexora',
+          resource_type: 'image',
+          overwrite: true,
+          timeout: 15_000,
         },
         (error, result) => {
           if (error) {

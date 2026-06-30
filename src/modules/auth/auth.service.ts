@@ -91,19 +91,16 @@ export class AuthService {
   }
 
   async validateGoogleUser(payload: GoogleUserPayload) {
-    let user = await this.usersService.findByEmail(payload.email);
+    const existingUser = await this.usersService.findByEmail(payload.email);
+    if (existingUser) return existingUser;
 
-    if (!user) {
-      user = await this.usersService.create({
-        email: payload.email,
-        displayName: payload.displayName,
-        avatarUrl: payload.avatarUrl,
-        provider: AuthProvider.GOOGLE,
-        providerId: payload.providerId,
-      });
-    }
-
-    return user;
+    return this.usersService.create({
+      email: payload.email,
+      displayName: payload.displayName,
+      avatarUrl: payload.avatarUrl,
+      provider: AuthProvider.GOOGLE,
+      providerId: payload.providerId,
+    });
   }
 
   async loginWithGoogleToken(idToken: string): Promise<AuthTokens> {

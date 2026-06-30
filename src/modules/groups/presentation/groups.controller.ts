@@ -67,17 +67,18 @@ export class GroupsController {
 
   @Post(':id/avatar')
   @RequireGroupRole(GroupRole.OWNER)
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 15 * 1024 * 1024, files: 1 } }))
   @ApiOperation({ summary: 'Upload group avatar' })
   uploadAvatar(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser('id') userId: string,
     @UploadedFile(
       new ParseFilePipeBuilder()
-        .addFileTypeValidator({ fileType: /(jpg|jpeg|png|webp)$/ })
+        .addFileTypeValidator({ fileType: 'image/(jpeg|png|webp)' })
         .addMaxSizeValidator({ maxSize: 15 * 1024 * 1024 })
         .build({
           errorHttpStatusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+          fileIsRequired: true,
         }),
     )
     file: Express.Multer.File,

@@ -2,7 +2,11 @@ import * as crypto from 'node:crypto';
 import { ForbiddenException, Inject, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { GroupRole } from '@prisma/client';
-import { BusinessRuleError, NotFoundError } from '../../../shared/common/domain-errors';
+import {
+  BusinessRuleError,
+  ConflictError,
+  NotFoundError,
+} from '../../../shared/common/domain-errors';
 import { CacheService } from '../../../shared/infrastructure/cache/cache.service';
 import { STORAGE_PORT, StoragePort } from '../../../shared/infrastructure/ports/storage.port';
 import { UsersService } from '../../users/users.service';
@@ -88,7 +92,11 @@ export class GroupsService {
       }
     }
 
-    const updated = await this.groupsRepository.update(groupId, dto);
+    const updated = await this.groupsRepository.update(groupId, {
+      name: dto.name,
+      description: dto.description,
+      currency: dto.currency,
+    });
     await this.cacheService.del(CacheService.keys.group(groupId));
     return updated;
   }
@@ -100,7 +108,7 @@ export class GroupsService {
     const group = this.toDomain(data);
     group.assertOwner(requestingUserId);
 
-    const key = `groups/${groupId}/avatar-${Date.now()}`;
+    const key = `groups/${groupId}/avatar`;
 
     const uploadResponse = await this.storage.upload({
       key,
@@ -112,13 +120,6 @@ export class GroupsService {
       const updated = await this.groupsRepository.update(groupId, {
         avatarUrl: uploadResponse.url,
       });
-
-      const oldAvatarKey = data.avatarUrl ? this.extractCloudinaryPublicId(data.avatarUrl) : null;
-      if (oldAvatarKey) {
-        this.storage
-          .delete(oldAvatarKey)
-          .catch((e) => this.logger.error(`Failed to delete old avatar: ${oldAvatarKey}`, e));
-      }
 
       await this.cacheService.del(CacheService.keys.group(groupId));
       return updated;
@@ -276,11 +277,11 @@ export class GroupsService {
 
     const userToInvite = await this.usersService.findByEmail(dto.email);
     if (!userToInvite) {
-      throw new Error('User not found with this email');
+      throw new NotFoundError('User', dto.email);
     }
 
     if (group.members.some((m) => m.userId === userToInvite.id)) {
-      throw new Error('User is already a member of this group');
+      throw new ConflictError('User is already a member of this group');
     }
 
     const inviter = await this.usersService.findById(requestingUserId);
@@ -315,14 +316,14 @@ export class GroupsService {
     const invitation = await this.groupsRepository.findInvitationByToken(token);
     if (!invitation) throw new NotFoundError('Invitation', token);
 
-    if (invitation.acceptedAt) throw new Error('Invitation already accepted');
+    if (invitation.acceptedAt) throw new ConflictError('Invitation already accepted');
     if (invitation.expiresAt && invitation.expiresAt < new Date()) {
-      throw new Error('Invitation expired');
+      throw new BusinessRuleError('Invitation expired');
     }
 
     const userToInvite = await this.usersService.findByEmail(invitation.email!);
     if (!userToInvite || userToInvite.id !== userId) {
-      throw new Error('You are not authorized to accept this invitation');
+      throw new ForbiddenException('You are not authorized to accept this invitation');
     }
 
     // Add member
@@ -364,22 +365,5 @@ export class GroupsService {
         .filter((m) => m.userId != null && m.role != null)
         .map((m) => ({ userId: m.userId as string, role: m.role as GroupRole })),
     );
-  }
-
-  private extractCloudinaryPublicId(url: string): string | null {
-    try {
-      const parts = url.split('/upload/');
-      if (parts.length !== 2) return null;
-      let path = parts[1];
-      if (!path) return null;
-      path = path.replace(/^v\d+\//, '');
-      const lastDotIndex = path.lastIndexOf('.');
-      if (lastDotIndex !== -1) {
-        path = path.substring(0, lastDotIndex);
-      }
-      return path;
-    } catch {
-      return null;
-    }
   }
 }

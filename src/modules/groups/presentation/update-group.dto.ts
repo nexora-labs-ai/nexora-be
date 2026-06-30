@@ -15,11 +15,6 @@ export class UpdateGroupDto {
   @MaxLength(500)
   description?: string;
 
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsUrl()
-  avatarUrl?: string;
-
   @ApiPropertyOptional({ enum: Currency })
   @IsOptional()
   @IsEnum(Currency)
