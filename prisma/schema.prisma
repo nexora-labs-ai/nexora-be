@@ -226,7 +226,7 @@ model GroupInvitation {
 model GroupFund {
   id        String   @id @default(uuid()) @db.Uuid
   groupId   String   @unique @map("group_id") @db.Uuid
-  balance   Decimal  @default(0)
+  balance   Decimal  @default(0) @db.Decimal(18, 2)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -242,7 +242,7 @@ model FundTransaction {
   createdBy String              @map("created_by") @db.Uuid
   expenseId String?             @map("expense_id") @db.Uuid
   type      FundTransactionType
-  amount    Decimal
+  amount    Decimal @db.Decimal(18, 2)
   note      String?
   createdAt DateTime            @default(now()) @map("created_at")
 
@@ -275,7 +275,7 @@ model Expense {
   createdBy     String           @map("created_by") @db.Uuid
   title         String
   description   String?
-  amount        Decimal
+  amount        Decimal @db.Decimal(18, 2)
   currency      Currency
   fundingSource FundingSource    @default(PERSONAL) @map("funding_source")
   splitType     ExpenseSplitType @map("split_type")
@@ -303,7 +303,7 @@ model ExpensePayer {
   id        String  @id @default(uuid()) @db.Uuid
   expenseId String  @map("expense_id") @db.Uuid
   userId    String  @map("user_id") @db.Uuid
-  amount    Decimal
+  amount    Decimal @db.Decimal(18, 2)
 
   expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id])
@@ -316,7 +316,7 @@ model ExpenseSplit {
   id        String    @id @default(uuid()) @db.Uuid
   expenseId String    @map("expense_id") @db.Uuid
   userId    String    @map("user_id") @db.Uuid
-  amount    Decimal
+  amount    Decimal @db.Decimal(18, 2)
   shares    Int?
   isPaid    Boolean   @default(false) @map("is_paid")
   paidAt    DateTime? @map("paid_at")
@@ -346,7 +346,7 @@ model Settlement {
   groupId    String           @map("group_id") @db.Uuid
   fromUserId String           @map("from_user_id") @db.Uuid
   toUserId   String           @map("to_user_id") @db.Uuid
-  amount     Decimal
+  amount     Decimal @db.Decimal(18, 2)
   currency   Currency
   status     SettlementStatus @default(PENDING)
   note       String?
@@ -408,7 +408,7 @@ model ItineraryItem {
   location      String?
   startTime     DateTime
   endTime       DateTime
-  estimatedCost Decimal? @map("estimated_cost")
+  estimatedCost Decimal? @db.Decimal(18, 2) @map("estimated_cost")
   orderNo       Int      @map("order_no")
   notes         String?
 
