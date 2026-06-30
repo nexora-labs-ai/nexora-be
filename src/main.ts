@@ -1,3 +1,4 @@
+import * as crypto from 'node:crypto';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
@@ -20,6 +21,14 @@ async function bootstrap() {
 
   // Use structured logger
   app.useLogger(logger);
+
+  // Correlation ID Middleware
+  app.use((req: any, res: any, next: any) => {
+    const correlationId = req.headers['x-correlation-id'] || crypto.randomUUID();
+    req.headers['x-correlation-id'] = correlationId;
+    res.setHeader('X-Correlation-ID', correlationId);
+    next();
+  });
 
   // Security
   app.use(helmet());
