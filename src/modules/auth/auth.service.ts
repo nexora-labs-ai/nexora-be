@@ -258,8 +258,8 @@ export class AuthService {
   private parseDuration(duration: string): number {
     const match = duration.match(/^(\d+)([smhd])$/);
     if (!match) return 900;
-    const value = Number.parseInt(match[1], 10);
-    const unit = match[2];
+    const value = Number.parseInt(match[1]!, 10);
+    const unit = match[2]!;
     switch (unit) {
       case 's':
         return value;
