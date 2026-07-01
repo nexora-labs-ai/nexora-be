@@ -51,12 +51,19 @@ export class UsersRepository {
   }
 
   async linkAuthAccount(userId: string, provider: AuthProvider, providerId: string) {
-    return this.prisma.userAuthAccount.create({
-      data: {
+    return this.prisma.userAuthAccount.upsert({
+      where: {
+        provider_providerUserId: {
+          provider,
+          providerUserId: providerId,
+        },
+      },
+      create: {
         userId,
         provider,
         providerUserId: providerId,
       },
+      update: {},
     });
   }
 
