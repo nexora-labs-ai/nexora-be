@@ -159,23 +159,11 @@ export class NotificationsService {
   @OnEvent(GROUP_EVENTS.INVITATION_RESPONDED)
   async onGroupInvitationResponded(event: GroupInvitationRespondedEvent) {
     try {
-      // Find notification by token inside data
-      const res = await this.notificationsRepository.findUserNotifications(event.userId, 1, 100);
-      const notifications = res.data;
-
-      for (const notif of notifications) {
-        if (notif.type === NotificationType.GROUP_INVITE) {
-          const payload = notif.data as GroupInviteNotificationPayload;
-          if (payload?.token === event.token) {
-            // Update payload to include status
-            const newPayload: GroupInviteNotificationPayload = {
-              ...payload,
-              status: event.status,
-            };
-            await this.notificationsRepository.updatePayload(notif.id, newPayload);
-          }
-        }
-      }
+      await this.notificationsRepository.updateInviteStatusByToken(
+        event.userId,
+        event.token,
+        event.status,
+      );
     } catch (error) {
       this.logger.error(
         `Failed to handle GROUP_EVENTS.INVITATION_RESPONDED: ${(error as Error).message}`,
