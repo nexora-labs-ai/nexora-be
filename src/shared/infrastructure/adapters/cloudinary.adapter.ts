@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, UnprocessableEntityException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { v2 as cloudinary } from 'cloudinary';
 import * as streamifier from 'streamifier';
@@ -24,7 +24,9 @@ export class CloudinaryAdapter implements StoragePort {
   async upload(request: UploadFileRequest): Promise<UploadFileResponse> {
     const ALLOWED = ['image/jpeg', 'image/png', 'image/webp'];
     if (request.mimeType && !ALLOWED.includes(request.mimeType)) {
-      return Promise.reject(new Error(`Unsupported mime type: ${request.mimeType}`));
+      return Promise.reject(
+        new UnprocessableEntityException(`Unsupported mime type: ${request.mimeType}`),
+      );
     }
 
     return new Promise((resolve, reject) => {

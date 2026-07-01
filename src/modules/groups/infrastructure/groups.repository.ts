@@ -37,15 +37,15 @@ export class GroupsRepository {
   ): Promise<PaginatedResult<unknown>> {
     const where = {
       deletedAt: null,
-      members: { some: { userId } },
+      members: { some: { userId, leftAt: null } },
     };
 
     const [data, total] = await Promise.all([
       this.prisma.group.findMany({
         where,
         include: {
-          members: { where: { userId } },
-          _count: { select: { members: true, expenses: true } },
+          members: { where: { userId, leftAt: null } },
+          _count: { select: { members: { where: { leftAt: null } }, expenses: true } },
         },
         orderBy: { updatedAt: 'desc' },
         ...buildPrismaSkipTake(page, limit),
