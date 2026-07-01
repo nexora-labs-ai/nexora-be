@@ -20,6 +20,9 @@ const envSchema = z.object({
   MEZON_CLIENT_SECRET: z.string().min(1).optional(),
   MEZON_REDIRECT_URI: z.string().url().optional(),
   MOBILE_OAUTH_CALLBACK: z.string().url().optional(),
+  CLOUDINARY_CLOUD_NAME: z.string().min(1),
+  CLOUDINARY_API_KEY: z.string().min(1),
+  CLOUDINARY_API_SECRET: z.string().min(1),
 });
 
 export type Env = z.infer<typeof envSchema>;

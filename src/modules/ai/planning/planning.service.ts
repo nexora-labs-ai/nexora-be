@@ -61,9 +61,9 @@ Return as JSON:
         title: string;
         description: string;
         location: string;
-        estimatedCost?: number;
         startTime?: string;
         endTime?: string;
+        estimatedCost?: number;
       }>;
     };
 
@@ -90,10 +90,10 @@ Return as JSON:
               title: item.title,
               description: item.description,
               location: item.location,
+              startTime: new Date(`2024-01-01T${item.startTime || '09:00'}:00Z`),
+              endTime: new Date(`2024-01-01T${item.endTime || '11:00'}:00Z`),
               estimatedCost: item.estimatedCost,
               orderNo: item.order + (item.day - 1) * 100,
-              startTime: new Date(`1970-01-01T${item.startTime || '09:00'}:00Z`),
-              endTime: new Date(`1970-01-01T${item.endTime || '10:00'}:00Z`),
             })),
           },
         },
