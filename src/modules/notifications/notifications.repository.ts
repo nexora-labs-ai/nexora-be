@@ -49,9 +49,16 @@ export class NotificationsRepository {
       type: NotificationType;
       title: string;
       body: string;
+      data?: Record<string, unknown>;
     }[],
   ) {
-    return this.prisma.notification.createMany({ data: notifications });
+    return this.prisma.$transaction(
+      notifications.map((n) =>
+        this.prisma.notification.create({
+          data: { ...n, data: n.data as object | undefined },
+        }),
+      ),
+    );
   }
 
   async markAsRead(id: string, userId: string) {
@@ -77,5 +84,25 @@ export class NotificationsRepository {
       where: { id },
       data: { data: payload },
     });
+  }
+
+  async updateInviteStatusByToken(userId: string, token: string, status: 'ACCEPTED' | 'REJECTED') {
+    const notifications = await this.prisma.notification.findMany({
+      where: {
+        userId,
+        type: NotificationType.GROUP_INVITE,
+        data: { path: ['token'], equals: token },
+      },
+    });
+
+    for (const notif of notifications) {
+      const payload = notif.data as Record<string, unknown>;
+      if (payload) {
+        await this.prisma.notification.update({
+          where: { id: notif.id },
+          data: { data: { ...payload, status } },
+        });
+      }
+    }
   }
 }

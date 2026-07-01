@@ -1,3 +1,4 @@
+import * as crypto from 'node:crypto';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
@@ -21,13 +22,29 @@ async function bootstrap() {
   // Use structured logger
   app.useLogger(logger);
 
+  // Correlation ID Middleware
+  app.use((req: any, res: any, next: any) => {
+    const correlationId = req.headers['x-correlation-id'] || crypto.randomUUID();
+    req.headers['x-correlation-id'] = correlationId;
+    res.setHeader('X-Correlation-ID', correlationId);
+    next();
+  });
+
   // Security
   app.use(helmet());
   app.use(compression());
 
-  // CORS
+  const corsOriginsConfig = configService.get<string>('app.corsOrigins');
+  const isProduction = configService.get('app.nodeEnv') === 'production';
+
+  if (isProduction && !corsOriginsConfig) {
+    throw new Error(
+      'CORS_ORIGINS must be defined in production environment to avoid security risks with credentials',
+    );
+  }
+
   app.enableCors({
-    origin: configService.get<string>('app.corsOrigins')?.split(',') ?? '*',
+    origin: corsOriginsConfig ? corsOriginsConfig.split(',') : [/localhost:\d+/],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Correlation-ID', 'X-API-Key', 'X-Client'],

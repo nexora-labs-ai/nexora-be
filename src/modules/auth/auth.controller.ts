@@ -93,8 +93,9 @@ export class AuthController {
     // Redirect directly to the app's Custom Scheme with the code attached
     const mobileCallbackUrl =
       this.configService.get<string>('MOBILE_OAUTH_CALLBACK') || 'com.nexora.app://oauth/callback';
-    const flutterAppDeepLink = `${mobileCallbackUrl}?code=${code}`;
-    return res.redirect(flutterAppDeepLink);
+    const url = new URL(mobileCallbackUrl);
+    url.searchParams.set('code', code);
+    return res.redirect(url.toString());
   }
 
   @Public()

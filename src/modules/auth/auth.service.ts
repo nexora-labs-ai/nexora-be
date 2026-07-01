@@ -1,3 +1,4 @@
+import * as crypto from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -5,7 +6,6 @@ import { AuthProvider, UserRole, UserStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { addDays } from 'date-fns';
 import { OAuth2Client } from 'google-auth-library';
-import { v4 as uuidv4 } from 'uuid';
 import { ConflictError, UnauthorizedError } from '../../shared/common/domain-errors';
 import { UsersService } from '../users/users.service';
 import { AuthRepository } from './auth.repository';
@@ -91,19 +91,24 @@ export class AuthService {
   }
 
   async validateGoogleUser(payload: GoogleUserPayload) {
-    let user = await this.usersService.findByEmail(payload.email);
-
-    if (!user) {
-      user = await this.usersService.create({
-        email: payload.email,
-        displayName: payload.displayName,
-        avatarUrl: payload.avatarUrl,
-        provider: AuthProvider.GOOGLE,
-        providerId: payload.providerId,
-      });
+    let user = await this.usersService.findByProvider(AuthProvider.GOOGLE, payload.providerId);
+    if (user) {
+      return user;
     }
 
-    return user;
+    user = await this.usersService.findByEmail(payload.email);
+    if (user) {
+      await this.usersService.linkAuthAccount(user.id, AuthProvider.GOOGLE, payload.providerId);
+      return user;
+    }
+
+    return this.usersService.create({
+      email: payload.email,
+      displayName: payload.displayName,
+      avatarUrl: payload.avatarUrl,
+      provider: AuthProvider.GOOGLE,
+      providerId: payload.providerId,
+    });
   }
 
   async loginWithGoogleToken(idToken: string): Promise<AuthTokens> {
@@ -116,6 +121,14 @@ export class AuthService {
       const payload = ticket.getPayload();
       if (!payload || !payload.email) {
         throw new UnauthorizedError('Invalid Google token');
+      }
+
+      if (payload.email_verified !== true) {
+        throw new UnauthorizedError('Google email is not verified');
+      }
+
+      if (!['accounts.google.com', 'https://accounts.google.com'].includes(payload.iss)) {
+        throw new UnauthorizedError('Invalid token issuer');
       }
 
       const user = await this.validateGoogleUser({
@@ -163,35 +176,38 @@ export class AuthService {
    * Pattern: Find by email first, if not found then create new with AuthProvider.MEZON
    */
   async validateMezonUser(mezonUser: MezonUserInfo) {
-    // If email exists, try to find current user (prevent duplicates with Google/Local accounts)
-    if (mezonUser.email) {
-      const existingUser = await this.usersService.findByEmail(mezonUser.email);
-      if (existingUser) {
-        return existingUser;
-      }
+    const user = await this.usersService.findByProvider(AuthProvider.MEZON, mezonUser.sub);
+    if (user) {
+      return user;
     }
 
-    // Not found → Create new user with MEZON provider
-    const newUser = await this.usersService.create({
-      email: mezonUser.email ?? undefined,
+    return this.usersService.create({
+      email: mezonUser.email ?? `${mezonUser.sub}@mezon.provider`,
       displayName: mezonUser.name ?? 'Mezon User',
       avatarUrl: mezonUser.picture,
       provider: AuthProvider.MEZON,
       providerId: mezonUser.sub,
     });
-
-    return newUser;
   }
 
   async refreshTokens(token: string): Promise<AuthTokens> {
-    const stored = await this.authRepository.findRefreshToken(token);
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+    const stored = await this.authRepository.findRefreshToken(hashedToken);
 
     if (!stored || !stored.expiresAt || stored.expiresAt < new Date() || !stored.user) {
       throw new UnauthorizedError('Invalid or expired refresh token');
     }
 
     // Rotate: revoke old, issue new
-    await this.authRepository.revokeRefreshToken(token);
+    const deleteResult = await this.authRepository.revokeRefreshToken(hashedToken);
+
+    if (deleteResult.count === 0) {
+      // Token reuse detected or race condition lost
+      await this.authRepository.revokeAllUserTokens(stored.user.id);
+      this.logger.warn(`Token reuse detected for user ${stored.user.id}. All sessions revoked.`);
+      throw new UnauthorizedError('Token reuse detected. All sessions revoked for security.');
+    }
+
     return this.generateTokens(
       stored.user.id,
       stored.user.email || '',
@@ -211,19 +227,42 @@ export class AuthService {
       expiresIn: this.configService.get<string>('jwt.accessExpiresIn'),
     });
 
-    const refreshToken = uuidv4();
+    const refreshToken = crypto.randomBytes(32).toString('hex');
+    const hashedToken = crypto.createHash('sha256').update(refreshToken).digest('hex');
     const expiresAt = addDays(new Date(), 7);
 
     await this.authRepository.createRefreshToken({
-      token: refreshToken,
+      token: hashedToken,
       userId,
       expiresAt,
     });
 
+    const expiresInConfig = this.configService.get<string>('jwt.accessExpiresIn') || '15m';
+    const expiresIn = this.parseDuration(expiresInConfig);
+
     return {
       accessToken,
       refreshToken,
-      expiresIn: 900, // 15 minutes
+      expiresIn,
     };
+  }
+
+  private parseDuration(duration: string): number {
+    const match = duration.match(/^(\d+)([smhd])$/);
+    if (!match) return 900;
+    const value = Number.parseInt(match[1]!, 10);
+    const unit = match[2]!;
+    switch (unit) {
+      case 's':
+        return value;
+      case 'm':
+        return value * 60;
+      case 'h':
+        return value * 3600;
+      case 'd':
+        return value * 86400;
+      default:
+        return 900;
+    }
   }
 }
