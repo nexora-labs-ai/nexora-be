@@ -176,17 +176,9 @@ export class AuthService {
    * Pattern: Find by email first, if not found then create new with AuthProvider.MEZON
    */
   async validateMezonUser(mezonUser: MezonUserInfo) {
-    let user = await this.usersService.findByProvider(AuthProvider.MEZON, mezonUser.sub);
+    const user = await this.usersService.findByProvider(AuthProvider.MEZON, mezonUser.sub);
     if (user) {
       return user;
-    }
-
-    if (mezonUser.email) {
-      user = await this.usersService.findByEmail(mezonUser.email);
-      if (user) {
-        await this.usersService.linkAuthAccount(user.id, AuthProvider.MEZON, mezonUser.sub);
-        return user;
-      }
     }
 
     return this.usersService.create({
