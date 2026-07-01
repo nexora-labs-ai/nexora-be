@@ -15,7 +15,10 @@ export class GroupsRepository {
     return this.prisma.group.findUnique({
       where: { id, deletedAt: null },
       include: {
-        members: { include: { user: { include: { profile: true } } } },
+        members: {
+          where: { leftAt: null, user: { deletedAt: null } },
+          include: { user: { include: { profile: true } } },
+        },
       },
     });
   }
@@ -23,7 +26,7 @@ export class GroupsRepository {
   async findByIdWithMembers(id: string) {
     return this.prisma.group.findUnique({
       where: { id, deletedAt: null },
-      include: { members: true },
+      include: { members: { where: { leftAt: null, user: { deletedAt: null } } } },
     });
   }
 
@@ -34,15 +37,15 @@ export class GroupsRepository {
   ): Promise<PaginatedResult<unknown>> {
     const where = {
       deletedAt: null,
-      members: { some: { userId } },
+      members: { some: { userId, leftAt: null } },
     };
 
     const [data, total] = await Promise.all([
       this.prisma.group.findMany({
         where,
         include: {
-          members: { where: { userId } },
-          _count: { select: { members: true, expenses: true } },
+          members: { where: { userId, leftAt: null, user: { deletedAt: null } } },
+          _count: { select: { members: { where: { leftAt: null } }, expenses: true } },
         },
         orderBy: { updatedAt: 'desc' },
         ...buildPrismaSkipTake(page, limit),
@@ -75,7 +78,10 @@ export class GroupsRepository {
     });
   }
 
-  async update(id: string, data: Partial<{ name: string; description: string }>) {
+  async update(
+    id: string,
+    data: Partial<{ name: string; description: string; avatarUrl: string; currency: Currency }>,
+  ) {
     return this.prisma.group.update({ where: { id }, data });
   }
 
@@ -143,5 +149,15 @@ export class GroupsRepository {
     return this.prisma.groupInvitation.delete({
       where: { id },
     });
+  }
+
+  async hasFinancialTransactions(groupId: string): Promise<boolean> {
+    const [expensesCount, settlementsCount, fundTransactionsCount] = await Promise.all([
+      this.prisma.expense.count({ where: { groupId } }),
+      this.prisma.settlement.count({ where: { groupId } }),
+      this.prisma.fundTransaction.count({ where: { fund: { groupId } } }),
+    ]);
+
+    return expensesCount > 0 || settlementsCount > 0 || fundTransactionsCount > 0;
   }
 }

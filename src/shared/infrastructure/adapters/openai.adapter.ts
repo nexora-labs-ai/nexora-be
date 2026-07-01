@@ -19,7 +19,7 @@ export class OpenAiAdapter implements AiPort {
 
   constructor(private readonly configService: ConfigService) {
     this.client = new OpenAI({
-      apiKey: this.configService.get<string>('openai.apiKey'),
+      apiKey: this.configService.get<string>('openai.apiKey') || 'missing-api-key',
     });
     this.model = this.configService.get<string>('openai.model') ?? 'gpt-4-turbo-preview';
     this.embeddingModel =

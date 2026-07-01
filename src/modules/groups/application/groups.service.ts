@@ -1,9 +1,14 @@
 import * as crypto from 'node:crypto';
-import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { GroupRole } from '@prisma/client';
-import { BusinessRuleError, NotFoundError } from '../../../shared/common/domain-errors';
+import {
+  BusinessRuleError,
+  ConflictError,
+  NotFoundError,
+} from '../../../shared/common/domain-errors';
 import { CacheService } from '../../../shared/infrastructure/cache/cache.service';
+import { STORAGE_PORT, StoragePort } from '../../../shared/infrastructure/ports/storage.port';
 import { UsersService } from '../../users/users.service';
 import { Group } from '../domain/group.entity';
 import {
@@ -23,6 +28,7 @@ import { UpdateGroupDto } from '../presentation/update-group.dto';
 export type GroupPayload = {
   id: string;
   name: string | null;
+  avatarUrl?: string | null;
   currency: string | null;
   members: { userId: string | null; role: GroupRole | null }[];
 };
@@ -36,6 +42,7 @@ export class GroupsService {
     private readonly usersService: UsersService,
     private readonly cacheService: CacheService,
     private readonly eventEmitter: EventEmitter2,
+    @Inject(STORAGE_PORT) private readonly storage: StoragePort,
   ) {}
 
   async getGroup(groupId: string, requestingUserId: string) {
@@ -74,11 +81,54 @@ export class GroupsService {
     if (!data) throw new NotFoundError('Group', groupId);
 
     const group = this.toDomain(data);
-    group.assertAdmin(requestingUserId);
+    group.assertOwner(requestingUserId);
 
-    const updated = await this.groupsRepository.update(groupId, dto);
+    if (dto.currency && dto.currency !== data.currency) {
+      const hasTransactions = await this.groupsRepository.hasFinancialTransactions(groupId);
+      if (hasTransactions) {
+        throw new BusinessRuleError(
+          'Cannot change group currency after financial transactions have been made',
+        );
+      }
+    }
+
+    const updated = await this.groupsRepository.update(groupId, {
+      name: dto.name,
+      description: dto.description,
+      currency: dto.currency,
+    });
     await this.cacheService.del(CacheService.keys.group(groupId));
     return updated;
+  }
+
+  async uploadAvatar(groupId: string, file: Express.Multer.File, requestingUserId: string) {
+    const data = await this.groupsRepository.findByIdWithMembers(groupId);
+    if (!data) throw new NotFoundError('Group', groupId);
+
+    const group = this.toDomain(data);
+    group.assertOwner(requestingUserId);
+
+    const key = `groups/${groupId}/avatar`;
+
+    const uploadResponse = await this.storage.upload({
+      key,
+      buffer: file.buffer,
+      mimeType: file.mimetype,
+    });
+
+    try {
+      const updated = await this.groupsRepository.update(groupId, {
+        avatarUrl: uploadResponse.url,
+      });
+
+      await this.cacheService.del(CacheService.keys.group(groupId));
+      return updated;
+    } catch (error) {
+      this.storage
+        .delete(uploadResponse.key)
+        .catch((e) => this.logger.error('Failed to rollback avatar', e));
+      throw error;
+    }
   }
 
   async deleteGroup(groupId: string, requestingUserId: string) {
@@ -97,7 +147,7 @@ export class GroupsService {
     if (!data) throw new NotFoundError('Group', groupId);
 
     const group = this.toDomain(data);
-    group.assertAdmin(requestingUserId);
+    group.assertOwner(requestingUserId);
     group.assertCanAddMember();
 
     const member = await this.groupsRepository.addMember(groupId, dto.userId);
@@ -123,7 +173,7 @@ export class GroupsService {
       );
     }
 
-    group.assertAdmin(requestingUserId);
+    group.assertOwner(requestingUserId);
 
     if (group.isOwner(targetUserId)) {
       throw new BusinessRuleError('Cannot remove the group owner');
@@ -200,8 +250,7 @@ export class GroupsService {
 
     const group = this.toDomain(data);
 
-    // Checked by guard, but keeping domain check for safety
-    group.assertAdmin(requestingUserId);
+    group.assertOwner(requestingUserId);
 
     if (targetUserId === requestingUserId && newRole !== GroupRole.OWNER) {
       throw new BusinessRuleError(
@@ -228,11 +277,11 @@ export class GroupsService {
 
     const userToInvite = await this.usersService.findByEmail(dto.email);
     if (!userToInvite) {
-      throw new Error('User not found with this email');
+      throw new NotFoundError('User', dto.email);
     }
 
     if (group.members.some((m) => m.userId === userToInvite.id)) {
-      throw new Error('User is already a member of this group');
+      throw new ConflictError('User is already a member of this group');
     }
 
     const inviter = await this.usersService.findById(requestingUserId);
@@ -267,14 +316,14 @@ export class GroupsService {
     const invitation = await this.groupsRepository.findInvitationByToken(token);
     if (!invitation) throw new NotFoundError('Invitation', token);
 
-    if (invitation.acceptedAt) throw new Error('Invitation already accepted');
+    if (invitation.acceptedAt) throw new ConflictError('Invitation already accepted');
     if (invitation.expiresAt && invitation.expiresAt < new Date()) {
-      throw new Error('Invitation expired');
+      throw new BusinessRuleError('Invitation expired');
     }
 
     const userToInvite = await this.usersService.findByEmail(invitation.email!);
     if (!userToInvite || userToInvite.id !== userId) {
-      throw new Error('You are not authorized to accept this invitation');
+      throw new ForbiddenException('You are not authorized to accept this invitation');
     }
 
     // Add member
