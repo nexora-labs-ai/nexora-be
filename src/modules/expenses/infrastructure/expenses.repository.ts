@@ -11,8 +11,14 @@ export class ExpensesRepository {
     return this.prisma.expense.findUnique({
       where: { id, deletedAt: null },
       include: {
-        payers: { include: { user: { include: { profile: true } } } },
-        splits: { include: { user: { include: { profile: true } } } },
+        payers: {
+          where: { user: { deletedAt: null } },
+          include: { user: { include: { profile: true } } },
+        },
+        splits: {
+          where: { user: { deletedAt: null } },
+          include: { user: { include: { profile: true } } },
+        },
         category: true,
       },
     });
@@ -35,8 +41,14 @@ export class ExpensesRepository {
       this.prisma.expense.findMany({
         where,
         include: {
-          payers: { include: { user: { include: { profile: true } } } },
-          splits: { include: { user: { include: { profile: true } } } },
+          payers: {
+            where: { user: { deletedAt: null } },
+            include: { user: { include: { profile: true } } },
+          },
+          splits: {
+            where: { user: { deletedAt: null } },
+            include: { user: { include: { profile: true } } },
+          },
           category: true,
         },
         orderBy: { date: 'desc' },
