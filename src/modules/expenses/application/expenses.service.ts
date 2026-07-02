@@ -52,7 +52,10 @@ export class ExpensesService {
 
   async createExpense(dto: CreateExpenseDto, payerId: string) {
     // Verify payer is group member
-    await this.groupsService.getGroup(dto.groupId, payerId);
+    const group = await this.groupsService.getGroup(dto.groupId, payerId);
+    const allowedUserIds = new Set(
+      (group as unknown as { members: { userId: string }[] }).members.map((m) => m.userId),
+    );
 
     const total = Money.of(dto.amount, dto.currency ?? 'USD');
 
@@ -61,14 +64,13 @@ export class ExpensesService {
 
     if (dto.splitType === ExpenseSplitType.SHARES && !dto.splits?.length) {
       // Auto-split equally among all members by giving 1 share
-      const group = await this.groupsService.getGroup(dto.groupId, payerId);
       const participants = (group as unknown as { members: { userId: string }[] }).members.map(
         (m) => ({ userId: m.userId, shares: 1 }),
       );
-      splits = ExpenseSplitter.split(total, participants, ExpenseSplitType.SHARES);
+      splits = ExpenseSplitter.split(total, participants, ExpenseSplitType.SHARES, allowedUserIds);
     } else {
       const participants = dto.splits ?? [];
-      splits = ExpenseSplitter.split(total, participants, dto.splitType);
+      splits = ExpenseSplitter.split(total, participants, dto.splitType, allowedUserIds);
     }
 
     const expense = await this.expensesRepository.create(
@@ -139,12 +141,16 @@ export class ExpensesService {
 
     // If amount, splitType, or splits change, recalculate
     if (dto.amount !== undefined || dto.splitType !== undefined || dto.splits !== undefined) {
+      const group = await this.groupsService.getGroup(expense.groupId!, requestingUserId);
+      const allowedUserIds = new Set(
+        (group as unknown as { members: { userId: string }[] }).members.map((m) => m.userId),
+      );
+
       if (splitType === ExpenseSplitType.SHARES && !dto.splits?.length && !expense.splits?.length) {
-        const group = await this.groupsService.getGroup(expense.groupId!, requestingUserId);
         const participants = (group as unknown as { members: { userId: string }[] }).members.map(
           (m) => ({ userId: m.userId, shares: 1 }),
         );
-        splits = ExpenseSplitter.split(total, participants, splitType);
+        splits = ExpenseSplitter.split(total, participants, splitType, allowedUserIds);
       } else {
         const participants =
           dto.splits ??
@@ -153,7 +159,7 @@ export class ExpensesService {
             amount: Number(s.amount),
             shares: s.shares ?? undefined,
           }));
-        splits = ExpenseSplitter.split(total, participants, splitType);
+        splits = ExpenseSplitter.split(total, participants, splitType, allowedUserIds);
       }
     }
 

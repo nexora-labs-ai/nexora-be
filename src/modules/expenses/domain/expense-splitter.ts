@@ -19,7 +19,17 @@ export class ExpenseSplitter {
     total: Money,
     participants: SplitInput[],
     splitType: ExpenseSplitType,
+    allowedUserIds?: Set<string>,
   ): SplitResult[] {
+    if (allowedUserIds) {
+      const invalid = participants.filter((p) => !allowedUserIds.has(p.userId));
+      if (invalid.length > 0) {
+        throw new BusinessRuleError(
+          `Split contains users who are not active members: ${invalid.map((s) => s.userId).join(', ')}`,
+        );
+      }
+    }
+
     switch (splitType) {
       case ExpenseSplitType.EXACT:
         return this.splitExact(total, participants);
