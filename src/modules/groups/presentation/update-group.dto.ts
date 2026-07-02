@@ -1,5 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, MaxLength } from 'class-validator';
+import { Currency } from '@prisma/client';
+import { IsEnum, IsOptional, IsString, IsUrl, MaxLength } from 'class-validator';
 
 export class UpdateGroupDto {
   @ApiPropertyOptional()
@@ -13,4 +14,9 @@ export class UpdateGroupDto {
   @IsString()
   @MaxLength(500)
   description?: string;
+
+  @ApiPropertyOptional({ enum: Currency })
+  @IsOptional()
+  @IsEnum(Currency)
+  currency?: Currency;
 }

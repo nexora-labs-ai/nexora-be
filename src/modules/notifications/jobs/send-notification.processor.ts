@@ -34,17 +34,18 @@ export class SendNotificationProcessor extends WorkerHost {
       title: string;
       body: string;
       groupId?: string;
+      data?: Record<string, unknown>;
     }>,
   ): Promise<void> {
-    const { type, userIds, title, body, groupId } = job.data;
+    const { type, userIds, title, body, groupId, data } = job.data;
 
-    await this.notificationsRepository.createMany(
-      userIds.map((userId) => ({ userId, type, title, body, groupId })),
+    const createdNotifications = await this.notificationsRepository.createMany(
+      userIds.map((userId) => ({ userId, type, title, body, groupId, data })),
     );
 
     // Push realtime to each user
-    for (const userId of userIds) {
-      this.realtimeService.notifyUser(userId, { type, title, body, groupId });
+    for (const notification of createdNotifications) {
+      this.realtimeService.notifyUser(notification.userId, notification);
     }
 
     this.logger.debug(`Sent ${userIds.length} notifications of type ${type}`);

@@ -3,8 +3,8 @@ import { AuthProvider, UserRole, UserStatus } from '@prisma/client';
 import { PrismaService } from '../../shared/database/prisma.service';
 
 export interface CreateUserData {
-  email?: string;
-  displayName?: string;
+  email: string;
+  displayName: string;
   passwordHash?: string;
   avatarUrl?: string;
   provider: AuthProvider;
@@ -32,6 +32,38 @@ export class UsersRepository {
         profile: true,
         authAccounts: true,
       },
+    });
+  }
+
+  async findByProvider(provider: AuthProvider, providerId: string) {
+    return this.prisma.user.findFirst({
+      where: {
+        deletedAt: null,
+        authAccounts: {
+          some: { provider, providerUserId: providerId },
+        },
+      },
+      include: {
+        profile: true,
+        authAccounts: true,
+      },
+    });
+  }
+
+  async linkAuthAccount(userId: string, provider: AuthProvider, providerId: string) {
+    return this.prisma.userAuthAccount.upsert({
+      where: {
+        provider_providerUserId: {
+          provider,
+          providerUserId: providerId,
+        },
+      },
+      create: {
+        userId,
+        provider,
+        providerUserId: providerId,
+      },
+      update: {},
     });
   }
 

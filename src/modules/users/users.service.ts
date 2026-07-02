@@ -23,6 +23,16 @@ export class UsersService {
     return this.usersRepository.findByEmail(email);
   }
 
+  async findByProvider(provider: string, providerId: string) {
+    return this.usersRepository.findByProvider(provider as any, providerId);
+  }
+
+  async linkAuthAccount(userId: string, provider: string, providerId: string) {
+    const linked = await this.usersRepository.linkAuthAccount(userId, provider as any, providerId);
+    await this.cacheService.del(CacheService.keys.user(userId));
+    return linked;
+  }
+
   async create(data: CreateUserData) {
     return this.usersRepository.create(data);
   }

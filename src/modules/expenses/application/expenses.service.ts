@@ -80,7 +80,11 @@ export class ExpensesService {
         amount: dto.amount,
         currency: dto.currency ?? 'USD',
         splitType: dto.splitType,
-        categoryId: dto.categoryId,
+        categoryId:
+          dto.categoryId ||
+          (() => {
+            throw new Error('Category is required');
+          })(),
         fundingSource: dto.fundingSource,
         date: dto.date ? new Date(dto.date) : undefined,
       },

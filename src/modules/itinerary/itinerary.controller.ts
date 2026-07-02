@@ -27,8 +27,12 @@ export class ItineraryController {
 
   @Post()
   @ApiOperation({ summary: 'Create an itinerary' })
-  create(@Query('groupId', ParseUUIDPipe) groupId: string, @Body() dto: CreateItineraryDto) {
-    return this.itineraryService.createItinerary(groupId, dto);
+  create(
+    @Query('groupId', ParseUUIDPipe) groupId: string,
+    @Body() dto: CreateItineraryDto,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.itineraryService.createItinerary(groupId, dto, userId);
   }
 
   @Post('generate')

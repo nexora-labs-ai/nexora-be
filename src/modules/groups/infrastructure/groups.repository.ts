@@ -15,7 +15,10 @@ export class GroupsRepository {
     return this.prisma.group.findUnique({
       where: { id, deletedAt: null },
       include: {
-        members: { include: { user: { include: { profile: true } } } },
+        members: {
+          where: { leftAt: null, user: { deletedAt: null } },
+          include: { user: { include: { profile: true } } },
+        },
         fund: true,
       },
     });
@@ -24,7 +27,7 @@ export class GroupsRepository {
   async findByIdWithMembers(id: string) {
     return this.prisma.group.findUnique({
       where: { id, deletedAt: null },
-      include: { members: true, fund: true },
+      include: { members: { where: { leftAt: null, user: { deletedAt: null } } }, fund: true },
     });
   }
 
@@ -35,16 +38,16 @@ export class GroupsRepository {
   ): Promise<PaginatedResult<unknown>> {
     const where = {
       deletedAt: null,
-      members: { some: { userId } },
+      members: { some: { userId, leftAt: null } },
     };
 
     const [data, total] = await Promise.all([
       this.prisma.group.findMany({
         where,
         include: {
-          members: { where: { userId } },
+          members: { where: { userId, leftAt: null, user: { deletedAt: null } } },
+          _count: { select: { members: { where: { leftAt: null } }, expenses: true } },
           fund: true,
-          _count: { select: { members: true, expenses: true } },
         },
         orderBy: { updatedAt: 'desc' },
         ...buildPrismaSkipTake(page, limit),
@@ -82,7 +85,10 @@ export class GroupsRepository {
     });
   }
 
-  async update(id: string, data: Partial<{ name: string; description: string }>) {
+  async update(
+    id: string,
+    data: Partial<{ name: string; description: string; avatarUrl: string; currency: Currency }>,
+  ) {
     return this.prisma.group.update({ where: { id }, data });
   }
 
@@ -152,6 +158,16 @@ export class GroupsRepository {
     });
   }
 
+  async hasFinancialTransactions(groupId: string): Promise<boolean> {
+    const [expensesCount, settlementsCount, fundTransactionsCount] = await Promise.all([
+      this.prisma.expense.count({ where: { groupId } }),
+      this.prisma.settlement.count({ where: { groupId } }),
+      this.prisma.fundTransaction.count({ where: { fund: { groupId } } }),
+    ]);
+
+    return expensesCount > 0 || settlementsCount > 0 || fundTransactionsCount > 0;
+  }
+
   async contributeFund(groupId: string, userId: string, amount: number, note?: string) {
     return this.prisma.$transaction(async (tx) => {
       // 1. Get or create GroupFund
@@ -195,26 +211,20 @@ export class GroupsRepository {
 
   async withdrawFund(groupId: string, userId: string, amount: number, note?: string) {
     return this.prisma.$transaction(async (tx) => {
-      const fund = await tx.groupFund.findUnique({
-        where: { groupId },
+      const fundRes = await tx.groupFund.updateMany({
+        where: { groupId, balance: { gte: amount } },
+        data: { balance: { decrement: amount } },
       });
 
-      if (!fund || Number(fund.balance) < amount) {
+      if (fundRes.count === 0) {
         throw new Error('Insufficient group fund balance for withdrawal');
       }
 
-      const updatedFund = await tx.groupFund.update({
-        where: { id: fund.id },
-        data: {
-          balance: {
-            decrement: amount,
-          },
-        },
-      });
+      const updatedFund = await tx.groupFund.findUniqueOrThrow({ where: { groupId } });
 
       const transaction = await tx.fundTransaction.create({
         data: {
-          fundId: fund.id,
+          fundId: updatedFund.id,
           createdBy: userId,
           type: 'REFUND',
           amount,

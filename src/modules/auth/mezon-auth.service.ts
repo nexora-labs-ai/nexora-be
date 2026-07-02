@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { UnauthorizedError } from '../../shared/common/domain-errors';
 
@@ -45,13 +45,28 @@ export class MezonAuthService {
       client_secret: clientSecret,
     });
 
-    const response = await fetch(tokenUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: formData.toString(),
-    });
+    const abortController = new AbortController();
+    const timeout = setTimeout(() => abortController.abort(), 8000);
+
+    let response: Response;
+    try {
+      response = await fetch(tokenUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: formData.toString(),
+        signal: abortController.signal,
+      });
+    } catch (error: any) {
+      this.logger.error(`Mezon token exchange request failed: ${error.message}`);
+      if (error.name === 'AbortError') {
+        throw new ServiceUnavailableException('Mezon token exchange timed out');
+      }
+      throw new ServiceUnavailableException('Failed to reach Mezon server');
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!response.ok) {
       const errorBody = await response.text();
@@ -73,12 +88,27 @@ export class MezonAuthService {
 
     this.logger.log('Fetching user info from Mezon userinfo endpoint');
 
-    const response = await fetch(userInfoUrl, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${mezonAccessToken}`,
-      },
-    });
+    const abortController = new AbortController();
+    const timeout = setTimeout(() => abortController.abort(), 8000);
+
+    let response: Response;
+    try {
+      response = await fetch(userInfoUrl, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${mezonAccessToken}`,
+        },
+        signal: abortController.signal,
+      });
+    } catch (error: any) {
+      this.logger.error(`Mezon userinfo request failed: ${error.message}`);
+      if (error.name === 'AbortError') {
+        throw new ServiceUnavailableException('Mezon user info fetch timed out');
+      }
+      throw new ServiceUnavailableException('Failed to reach Mezon server');
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!response.ok) {
       const errorBody = await response.text();
