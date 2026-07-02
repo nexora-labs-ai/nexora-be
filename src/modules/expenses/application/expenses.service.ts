@@ -61,7 +61,7 @@ export class ExpensesService {
     const total = Money.of(dto.amount, dto.currency ?? 'USD');
 
     // Determine splits
-    let splits: { userId: string; amount: number; percentage?: number; shares?: number }[];
+    let splits: { userId: string; amount: number; shares?: number }[];
 
     if (dto.splitType === ExpenseSplitType.SHARES && !dto.splits?.length) {
       // Auto-split equally among all members by giving 1 share
@@ -131,9 +131,7 @@ export class ExpensesService {
       if (!isOwner) throw new ForbiddenError('Only the creator or group owner can edit an expense');
     }
 
-    let splits:
-      | { userId: string; amount: number; percentage?: number; shares?: number }[]
-      | undefined;
+    let splits: { userId: string; amount: number; shares?: number }[] | undefined;
 
     const amount = dto.amount ?? Number(expense.amount);
     const currency = dto.currency ?? expense.currency ?? 'USD';
