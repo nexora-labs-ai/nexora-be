@@ -21,6 +21,10 @@ export class ExpenseSplitter {
     splitType: ExpenseSplitType,
     allowedUserIds?: Set<string>,
   ): SplitResult[] {
+    if (!participants.length) {
+      throw new BusinessRuleError('Expense must have at least one split participant');
+    }
+
     if (allowedUserIds) {
       const invalid = participants.filter((p) => !allowedUserIds.has(p.userId));
       if (invalid.length > 0) {
