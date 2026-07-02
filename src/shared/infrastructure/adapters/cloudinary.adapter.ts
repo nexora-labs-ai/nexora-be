@@ -38,7 +38,7 @@ export class CloudinaryAdapter implements StoragePort {
           overwrite: true,
           timeout: 15_000,
         },
-        (error, result) => {
+        (error: any, result: any) => {
           if (error) {
             this.logger.error('Failed to upload file to Cloudinary', error);
             return reject(error);
@@ -60,7 +60,7 @@ export class CloudinaryAdapter implements StoragePort {
 
   async delete(key: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      cloudinary.uploader.destroy(key, (error, result) => {
+      cloudinary.uploader.destroy(key, (error: any, result: any) => {
         if (error) {
           this.logger.error(`Failed to delete file from Cloudinary: ${key}`, error);
           return reject(error);

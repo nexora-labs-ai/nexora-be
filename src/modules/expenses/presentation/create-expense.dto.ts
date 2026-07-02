@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ExpenseSplitType } from '@prisma/client';
+import { ExpenseSplitType, FundingSource } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
   IsArray,
@@ -25,12 +25,6 @@ export class SplitParticipantDto {
   @IsNumber()
   @Min(0)
   amount?: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  percentage?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -69,10 +63,13 @@ export class CreateExpenseDto {
   @IsEnum(ExpenseSplitType)
   splitType: ExpenseSplitType;
 
-  @ApiPropertyOptional()
-  @IsOptional()
+  @ApiProperty({ enum: FundingSource, example: FundingSource.PERSONAL })
+  @IsEnum(FundingSource)
+  fundingSource: FundingSource;
+
+  @ApiProperty()
   @IsUUID()
-  categoryId?: string;
+  categoryId: string;
 
   @ApiPropertyOptional()
   @IsOptional()

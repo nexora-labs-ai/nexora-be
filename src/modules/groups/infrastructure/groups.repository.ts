@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Currency, GroupRole } from '@prisma/client';
+import { BusinessRuleError, NotFoundError } from '../../../shared/common/domain-errors';
 import {
   PaginatedResult,
   buildPaginationMeta,
@@ -19,6 +20,7 @@ export class GroupsRepository {
           where: { leftAt: null, user: { deletedAt: null } },
           include: { user: { include: { profile: true } } },
         },
+        fund: true,
       },
     });
   }
@@ -26,7 +28,7 @@ export class GroupsRepository {
   async findByIdWithMembers(id: string) {
     return this.prisma.group.findUnique({
       where: { id, deletedAt: null },
-      include: { members: { where: { leftAt: null, user: { deletedAt: null } } } },
+      include: { members: { where: { leftAt: null, user: { deletedAt: null } } }, fund: true },
     });
   }
 
@@ -46,6 +48,7 @@ export class GroupsRepository {
         include: {
           members: { where: { userId, leftAt: null, user: { deletedAt: null } } },
           _count: { select: { members: { where: { leftAt: null } }, expenses: true } },
+          fund: true,
         },
         orderBy: { updatedAt: 'desc' },
         ...buildPrismaSkipTake(page, limit),
@@ -73,8 +76,13 @@ export class GroupsRepository {
             role: GroupRole.OWNER,
           },
         },
+        fund: {
+          create: {
+            balance: 0,
+          },
+        },
       },
-      include: { members: true },
+      include: { members: true, fund: true },
     });
   }
 
@@ -159,5 +167,103 @@ export class GroupsRepository {
     ]);
 
     return expensesCount > 0 || settlementsCount > 0 || fundTransactionsCount > 0;
+  }
+
+  async contributeFund(groupId: string, userId: string, amount: number, note?: string) {
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Get or create GroupFund
+      let fund = await tx.groupFund.findUnique({
+        where: { groupId },
+      });
+
+      if (!fund) {
+        fund = await tx.groupFund.create({
+          data: {
+            groupId,
+            balance: 0,
+          },
+        });
+      }
+
+      // 2. Update balance
+      const updatedFund = await tx.groupFund.update({
+        where: { id: fund.id },
+        data: {
+          balance: {
+            increment: amount,
+          },
+        },
+      });
+
+      // 3. Create FundTransaction
+      const transaction = await tx.fundTransaction.create({
+        data: {
+          fundId: fund.id,
+          createdBy: userId,
+          type: 'CONTRIBUTION',
+          amount,
+          note,
+        },
+      });
+
+      return { fund: updatedFund, transaction };
+    });
+  }
+
+  async withdrawFund(groupId: string, userId: string, amount: number, note?: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const fundRes = await tx.groupFund.updateMany({
+        where: { groupId, balance: { gte: amount } },
+        data: { balance: { decrement: amount } },
+      });
+
+      if (fundRes.count === 0) {
+        const fund = await tx.groupFund.findUnique({ where: { groupId } });
+        if (!fund) throw new NotFoundError('GroupFund', groupId);
+        throw new BusinessRuleError('Insufficient group fund balance for withdrawal');
+      }
+
+      const updatedFund = await tx.groupFund.findUniqueOrThrow({ where: { groupId } });
+
+      const transaction = await tx.fundTransaction.create({
+        data: {
+          fundId: updatedFund.id,
+          createdBy: userId,
+          type: 'REFUND',
+          amount,
+          note,
+        },
+      });
+
+      return { fund: updatedFund, transaction };
+    });
+  }
+
+  async findFundTransactions(groupId: string) {
+    const fund = await this.prisma.groupFund.findUnique({
+      where: { groupId },
+      select: { id: true },
+    });
+
+    if (!fund) return [];
+
+    return this.prisma.fundTransaction.findMany({
+      where: { fundId: fund.id },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        creator: {
+          select: {
+            id: true,
+            email: true,
+            profile: {
+              select: {
+                displayName: true,
+                avatarUrl: true,
+              },
+            },
+          },
+        },
+      },
+    });
   }
 }
