@@ -41,20 +41,27 @@ export class ExpenseSplitter {
   }
 
   private static splitExact(total: Money, participants: SplitInput[]): SplitResult[] {
-    const splits = participants.map((p) => ({
-      userId: p.userId,
-      amount: p.amount ?? 0,
-      shares: p.shares,
-    }));
-    const splitTotal = splits.reduce((s, r) => s + r.amount, 0);
+    const totalCents = Math.round(total.amount * 100);
+    const cents = participants.map((p) => Math.round((p.amount ?? 0) * 100));
+    const sum = cents.reduce((s, c) => s + c, 0);
 
-    if (Math.abs(splitTotal - total.amount) > 0.01) {
+    // Allow maximum 1 cent discrepancy per person due to frontend rounding
+    if (Math.abs(sum - totalCents) > participants.length) {
       throw new BusinessRuleError(
-        `Split amounts (${splitTotal}) must equal total (${total.amount})`,
+        `Split amounts (${sum / 100}) must equal total (${total.amount})`,
       );
     }
 
-    return splits;
+    // Reconcile remainder to the last participant to ensure exact match
+    if (cents.length > 0) {
+      cents[cents.length - 1] += totalCents - sum;
+    }
+
+    return participants.map((p, i) => ({
+      userId: p.userId,
+      amount: cents[i]! / 100,
+      shares: p.shares,
+    }));
   }
 
   private static splitByShares(total: Money, participants: SplitInput[]): SplitResult[] {
