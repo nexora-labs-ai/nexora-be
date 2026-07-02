@@ -34,8 +34,9 @@ export class ExpensesService {
     // Validate membership
     await this.groupsService.getGroup(groupId, userId);
 
+    const filterKey = `${filters?.categoryId ?? '_'}:${filters?.payerId ?? '_'}`;
     return this.cacheService.getOrSet(
-      `${CacheService.keys.groupExpenses(groupId)}:${page}:${limit}`,
+      `${CacheService.keys.groupExpenses(groupId)}:${page}:${limit}:${filterKey}`,
       () => this.expensesRepository.findGroupExpenses(groupId, page, limit, filters),
       60, // 1 minute cache
     );
