@@ -24,7 +24,8 @@ export class GroupRoleGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest();
     const user = request.user;
-    const groupId = request.params.id || request.params.groupId;
+    const groupId =
+      request.params.id || request.params.groupId || request.query.groupId || request.body?.groupId;
 
     if (!user || !user.id) {
       throw new ForbiddenError('User not authenticated');

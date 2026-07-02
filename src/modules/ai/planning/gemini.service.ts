@@ -27,10 +27,14 @@ export class GeminiService {
     }
 
     try {
-      const response = await fetch(`${this.apiUrl}?key=${this.apiKey}`, {
+      const abortController = new AbortController();
+      const timeoutId = setTimeout(() => abortController.abort(), 60000);
+
+      const response = await fetch(this.apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-goog-api-key': this.apiKey,
         },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
@@ -39,7 +43,10 @@ export class GeminiService {
             temperature: 0.7,
           },
         }),
+        signal: abortController.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         const errorText = await response.text();
