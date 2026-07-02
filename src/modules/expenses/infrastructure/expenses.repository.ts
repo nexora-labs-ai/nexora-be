@@ -149,7 +149,7 @@ export class ExpensesRepository {
         })),
       });
 
-      return tx.expense.findUniqueOrThrow({
+      return tx.expense.findFirstOrThrow({
         where: { id: expense.id },
         include: {
           payers: { include: { user: { include: { profile: true } } } },
@@ -175,7 +175,7 @@ export class ExpensesRepository {
     splits?: { userId: string; amount: number; shares?: number }[],
   ) {
     return this.prisma.$transaction(async (tx) => {
-      const oldExpense = await tx.expense.findUniqueOrThrow({
+      const oldExpense = await tx.expense.findFirstOrThrow({
         where: { id },
         include: { payers: true },
       });
@@ -265,7 +265,7 @@ export class ExpensesRepository {
         });
       }
 
-      return tx.expense.findUniqueOrThrow({
+      return tx.expense.findFirstOrThrow({
         where: { id },
         include: {
           payers: { include: { user: { include: { profile: true } } } },
@@ -278,7 +278,7 @@ export class ExpensesRepository {
 
   async softDelete(id: string) {
     return this.prisma.$transaction(async (tx) => {
-      const expense = await tx.expense.findUniqueOrThrow({
+      const expense = await tx.expense.findFirstOrThrow({
         where: { id },
       });
 
