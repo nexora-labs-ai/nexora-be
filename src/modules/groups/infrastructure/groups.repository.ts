@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Currency, GroupRole } from '@prisma/client';
+import { BusinessRuleError, NotFoundError } from '../../../shared/common/domain-errors';
 import {
   PaginatedResult,
   buildPaginationMeta,
@@ -217,7 +218,9 @@ export class GroupsRepository {
       });
 
       if (fundRes.count === 0) {
-        throw new Error('Insufficient group fund balance for withdrawal');
+        const fund = await tx.groupFund.findUnique({ where: { groupId } });
+        if (!fund) throw new NotFoundError('GroupFund', groupId);
+        throw new BusinessRuleError('Insufficient group fund balance for withdrawal');
       }
 
       const updatedFund = await tx.groupFund.findUniqueOrThrow({ where: { groupId } });
