@@ -18,6 +18,14 @@ export class CategoriesController {
   })
   @Header('Cache-Control', 'public, max-age=86400') // Cache for 24 hours
   async findAll() {
-    return this.expensesService.getCategories();
+    const categories = await this.expensesService.getCategories();
+    return categories.map((c) => ({
+      id: c.id,
+      name: c.name,
+      icon: c.icon,
+      color: c.color,
+      isDefault: c.isDefault,
+      createdAt: c.createdAt,
+    }));
   }
 }
