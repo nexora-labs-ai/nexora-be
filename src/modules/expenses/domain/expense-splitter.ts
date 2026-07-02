@@ -58,7 +58,7 @@ export class ExpenseSplitter {
 
     // Reconcile remainder to the last participant to ensure exact match
     if (cents.length > 0) {
-      cents[cents.length - 1] += totalCents - sum;
+      cents[cents.length - 1] = cents[cents.length - 1]! + (totalCents - sum);
     }
 
     return participants.map((p, i) => ({
