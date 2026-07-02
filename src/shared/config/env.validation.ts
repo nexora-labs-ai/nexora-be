@@ -11,6 +11,8 @@ const envSchema = z.object({
   MEZON_CLIENT_ID: z.string().min(1).optional(),
   MEZON_CLIENT_SECRET: z.string().min(1).optional(),
   MEZON_REDIRECT_URI: z.string().url().optional(),
+  GEMINI_API_KEY: z.string().min(1),
+  GEMINI_MODEL: z.string().min(1).default('gemini-2.5-flash'),
 });
 
 export type Env = z.infer<typeof envSchema>;

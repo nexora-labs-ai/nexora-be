@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { ItineraryStatus } from '@prisma/client';
-import { NotFoundError } from '../../shared/common/domain-errors';
+import { ItineraryStatus, Prisma } from '@prisma/client';
+import { BusinessRuleError, NotFoundError } from '../../shared/common/domain-errors';
 import { PrismaService } from '../../shared/database/prisma.service';
 import { AiItineraryItem, PlanningService } from '../ai/planning/planning.service';
+import { Group } from '../groups/domain/group.entity';
 import { CreateItineraryDto } from './dto/create-itinerary.dto';
 import { CreateItineraryItemDto, UpdateItineraryItemDto } from './dto/itinerary-item.dto';
 
@@ -13,10 +14,26 @@ export class ItineraryService {
     private readonly planningService: PlanningService,
   ) {}
 
+  private async assertItineraryAccess(itineraryId: string, userId: string) {
+    const it = await this.prisma.itinerary.findUnique({
+      where: { id: itineraryId },
+      select: { id: true, groupId: true },
+    });
+    if (!it) throw new NotFoundError('Itinerary', itineraryId);
+
+    const members = await this.prisma.groupMember.findMany({
+      where: { groupId: it.groupId, leftAt: null },
+      select: { userId: true, role: true },
+    });
+
+    new Group(it.groupId, '', '', members).assertMember(userId);
+    return it;
+  }
+
   async getGroupItineraries(groupId: string) {
     return this.prisma.itinerary.findMany({
       where: { groupId },
-      include: { items: { orderBy: { orderNo: 'asc' } } },
+      include: { items: { orderBy: [{ startTime: 'asc' }, { orderNo: 'asc' }] } },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -46,16 +63,14 @@ export class ItineraryService {
       requestedBy: string;
     },
   ) {
-    // Generate AI itinerary synchronously
     return this.planningService.generateItinerary({
       groupId,
       ...params,
     });
   }
 
-  async publishItinerary(id: string) {
-    const itinerary = await this.prisma.itinerary.findUnique({ where: { id } });
-    if (!itinerary) throw new NotFoundError('Itinerary', id);
+  async publishItinerary(id: string, userId: string) {
+    await this.assertItineraryAccess(id, userId);
 
     return this.prisma.itinerary.update({
       where: { id },
@@ -63,7 +78,9 @@ export class ItineraryService {
     });
   }
 
-  async createItineraryItem(itineraryId: string, dto: CreateItineraryItemDto) {
+  async createItineraryItem(itineraryId: string, dto: CreateItineraryItemDto, userId: string) {
+    await this.assertItineraryAccess(itineraryId, userId);
+
     // Determine orderNo
     let orderNo = dto.orderNo;
     if (orderNo === undefined) {
@@ -74,6 +91,14 @@ export class ItineraryService {
       orderNo = lastItem ? lastItem.orderNo + 1 : 1;
     }
 
+    let estimatedCost = null;
+    if (dto.estimatedCost !== undefined && dto.estimatedCost !== null) {
+      estimatedCost = new Prisma.Decimal(dto.estimatedCost).toDecimalPlaces(
+        2,
+        Prisma.Decimal.ROUND_HALF_UP,
+      );
+    }
+
     return this.prisma.itineraryItem.create({
       data: {
         itineraryId,
@@ -82,93 +107,123 @@ export class ItineraryService {
         location: dto.location,
         startTime: new Date(dto.startTime),
         endTime: new Date(dto.endTime),
-        estimatedCost: dto.estimatedCost,
+        estimatedCost,
         orderNo,
         notes: dto.notes,
       },
     });
   }
 
-  async updateItineraryItem(itineraryId: string, itemId: string, dto: UpdateItineraryItemDto) {
-    const item = await this.prisma.itineraryItem.findUnique({ where: { id: itemId } });
-    if (!item || item.itineraryId !== itineraryId) {
-      throw new NotFoundError('ItineraryItem', itemId);
-    }
+  private async applyCollisionBasedShift(
+    tx: Prisma.TransactionClient,
+    itineraryId: string,
+    updatedItem: { id: string; startTime: Date; endTime: Date },
+  ) {
+    // Get all items on the SAME DAY (by UTC date string)
+    const targetDateStr = updatedItem.startTime.toISOString().split('T')[0];
 
-    let deltaEndMs = 0;
-    let deltaStartMs = 0;
-    if (dto.endTime) {
-      deltaEndMs = new Date(dto.endTime).getTime() - item.endTime.getTime();
-    }
-    if (dto.startTime) {
-      deltaStartMs = new Date(dto.startTime).getTime() - item.startTime.getTime();
-    }
-
-    const updatedItem = await this.prisma.itineraryItem.update({
-      where: { id: itemId },
-      data: {
-        title: dto.title,
-        description: dto.description,
-        location: dto.location,
-        startTime: dto.startTime ? new Date(dto.startTime) : undefined,
-        endTime: dto.endTime ? new Date(dto.endTime) : undefined,
-        estimatedCost: dto.estimatedCost,
-        orderNo: dto.orderNo,
-        notes: dto.notes,
-      },
+    const allItems = await tx.itineraryItem.findMany({
+      where: { itineraryId },
+      orderBy: { startTime: 'asc' },
     });
 
-    if (deltaEndMs !== 0) {
-      const intervalStr = `${deltaEndMs} milliseconds`;
-      await this.prisma.$executeRaw`
-        UPDATE "itinerary_items"
-        SET "startTime" = "startTime" + ${intervalStr}::interval,
-            "endTime" = "endTime" + ${intervalStr}::interval
-        WHERE "itinerary_id" = ${itineraryId}::uuid
-          AND "order_no" > ${item.orderNo}
-      `;
-    }
+    const subsequentItems = allItems.filter(
+      (item) =>
+        item.startTime.toISOString().split('T')[0] === targetDateStr &&
+        item.id !== updatedItem.id &&
+        item.startTime >= updatedItem.startTime,
+    );
 
-    if (deltaStartMs !== 0) {
-      const intervalStr = `${deltaStartMs} milliseconds`;
-      await this.prisma.$executeRaw`
-        UPDATE "itinerary_items"
-        SET "startTime" = "startTime" + ${intervalStr}::interval,
-            "endTime" = "endTime" + ${intervalStr}::interval
-        WHERE "itinerary_id" = ${itineraryId}::uuid
-          AND "order_no" < ${item.orderNo}
-      `;
-    }
+    let currentEndTime = updatedItem.endTime;
 
-    return updatedItem;
+    for (const item of subsequentItems) {
+      if (item.startTime < currentEndTime) {
+        const overlapMs = currentEndTime.getTime() - item.startTime.getTime();
+        const newStartTime = new Date(item.startTime.getTime() + overlapMs);
+        const newEndTime = new Date(item.endTime.getTime() + overlapMs);
+
+        await tx.itineraryItem.update({
+          where: { id: item.id },
+          data: { startTime: newStartTime, endTime: newEndTime },
+        });
+
+        currentEndTime = newEndTime;
+      } else {
+        // No collision, stop ripple
+        break;
+      }
+    }
   }
 
-  async deleteItineraryItem(itineraryId: string, itemId: string) {
+  async updateItineraryItem(
+    itineraryId: string,
+    itemId: string,
+    dto: UpdateItineraryItemDto,
+    userId: string,
+  ) {
+    await this.assertItineraryAccess(itineraryId, userId);
+
     const item = await this.prisma.itineraryItem.findUnique({ where: { id: itemId } });
     if (!item || item.itineraryId !== itineraryId) {
       throw new NotFoundError('ItineraryItem', itemId);
     }
 
-    // Delete item
-    await this.prisma.itineraryItem.delete({ where: { id: itemId } });
+    const newStart = dto.startTime ? new Date(dto.startTime) : item.startTime;
+    const newEnd = dto.endTime ? new Date(dto.endTime) : item.endTime;
+    if (newEnd.getTime() <= newStart.getTime()) {
+      throw new BusinessRuleError('endTime must be after startTime');
+    }
 
-    // Calculate duration of the deleted item
-    const durationMs = item.endTime.getTime() - item.startTime.getTime();
+    let estimatedCost = item.estimatedCost;
+    if (dto.estimatedCost !== undefined && dto.estimatedCost !== null) {
+      estimatedCost = new Prisma.Decimal(dto.estimatedCost).toDecimalPlaces(
+        2,
+        Prisma.Decimal.ROUND_HALF_UP,
+      );
+    } else if (dto.estimatedCost === null) {
+      estimatedCost = null;
+    }
 
-    // Shift subsequent items backward
-    const intervalStr = `-${durationMs} milliseconds`;
-    await this.prisma.$executeRaw`
-      UPDATE "itinerary_items"
-      SET "startTime" = "startTime" + ${intervalStr}::interval,
-          "endTime" = "endTime" + ${intervalStr}::interval
-      WHERE "itinerary_id" = ${itineraryId}::uuid
-        AND "order_no" > ${item.orderNo}
-    `;
+    return this.prisma.$transaction(async (tx) => {
+      const updatedItem = await tx.itineraryItem.update({
+        where: { id: itemId },
+        data: {
+          title: dto.title,
+          description: dto.description,
+          location: dto.location,
+          startTime: newStart,
+          endTime: newEnd,
+          estimatedCost,
+          orderNo: dto.orderNo,
+          notes: dto.notes,
+          travelTime: dto.travelTime,
+        },
+      });
 
-    return { success: true };
+      await this.applyCollisionBasedShift(tx, itineraryId, updatedItem);
+
+      return updatedItem;
+    });
   }
 
-  async aiEditItineraryItem(itineraryId: string, itemId: string, prompt: string) {
+  async deleteItineraryItem(itineraryId: string, itemId: string, userId: string) {
+    await this.assertItineraryAccess(itineraryId, userId);
+
+    const item = await this.prisma.itineraryItem.findUnique({ where: { id: itemId } });
+    if (!item || item.itineraryId !== itineraryId) {
+      throw new NotFoundError('ItineraryItem', itemId);
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.itineraryItem.delete({ where: { id: itemId } });
+      // In collision-based logic, deleting an item simply leaves a gap. We don't pull items back.
+      return { success: true };
+    });
+  }
+
+  async aiEditItineraryItem(itineraryId: string, itemId: string, prompt: string, userId: string) {
+    await this.assertItineraryAccess(itineraryId, userId);
+
     const item = await this.prisma.itineraryItem.findUnique({ where: { id: itemId } });
     if (!item || item.itineraryId !== itineraryId) throw new NotFoundError('ItineraryItem', itemId);
 
@@ -211,7 +266,9 @@ export class ItineraryService {
     return { success: true };
   }
 
-  async aiEditEntireItinerary(itineraryId: string, prompt: string) {
+  async aiEditEntireItinerary(itineraryId: string, prompt: string, userId: string) {
+    await this.assertItineraryAccess(itineraryId, userId);
+
     const itinerary = await this.prisma.itinerary.findUnique({
       where: { id: itineraryId },
       include: { items: { orderBy: { orderNo: 'asc' } } },

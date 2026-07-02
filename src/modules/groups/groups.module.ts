@@ -8,6 +8,6 @@ import { GroupsController } from './presentation/groups.controller';
   imports: [UsersModule],
   controllers: [GroupsController],
   providers: [GroupsService, GroupsRepository],
-  exports: [GroupsService],
+  exports: [GroupsService, GroupsRepository],
 })
 export class GroupsModule {}

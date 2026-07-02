@@ -6,10 +6,19 @@ import { GeminiService } from './planning/gemini.service';
 import { PlanningService } from './planning/planning.service';
 import { RecommendationAiService } from './recommendation/recommendation.service';
 
+import { AiJobsProcessor } from './jobs/ai-jobs.processor';
+
 @Module({
   imports: [],
   controllers: [AiController],
-  providers: [ChatService, MemoryService, RecommendationAiService, PlanningService, GeminiService],
+  providers: [
+    ChatService,
+    MemoryService,
+    RecommendationAiService,
+    PlanningService,
+    GeminiService,
+    AiJobsProcessor,
+  ],
   exports: [ChatService, MemoryService, PlanningService],
 })
 export class AiModule {}

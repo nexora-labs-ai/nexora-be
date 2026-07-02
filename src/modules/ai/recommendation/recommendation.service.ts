@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { RecommendationType } from '@prisma/client';
 import { PrismaService } from '../../../shared/database/prisma.service';
 import { AI_PORT, AiPort } from '../../../shared/infrastructure/ports/ai.port';
 
@@ -63,6 +64,11 @@ Return only valid JSON.`;
       return;
     }
 
+    if (!owner) {
+      this.logger.error('Cannot create recommendations: Group owner not found');
+      return;
+    }
+
     // Store recommendations
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
@@ -70,8 +76,10 @@ Return only valid JSON.`;
     await this.prisma.recommendation.createMany({
       data: recommendations.map((r) => ({
         groupId,
-        createdBy: owner?.userId || '',
-        type: (r.type.toUpperCase() as any) || 'ACTIVITY',
+        createdBy: owner.userId,
+        type:
+          RecommendationType[r.type.toUpperCase() as keyof typeof RecommendationType] ||
+          RecommendationType.ACTIVITY,
         title: r.title,
         content: { body: r.content, priority: r.priority },
         expiresAt,

@@ -28,6 +28,10 @@ export class AiJobsProcessor extends WorkerHost {
         await this.recommendationService.generateBudgetAnalysis(job.data.groupId);
         break;
 
+      case JOB_NAMES.GENERATE_ITINERARY:
+        await this.planningService.generateItinerary(job.data);
+        break;
+
       default:
         this.logger.warn(`Unknown AI job: ${job.name}`);
     }
