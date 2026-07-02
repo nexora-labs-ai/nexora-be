@@ -180,6 +180,7 @@ export class GroupsController {
   }
 
   @Post(':id/fund/withdraw')
+  @RequireGroupRole(GroupRole.OWNER)
   @ApiOperation({ summary: 'Withdraw/Refund from the group fund' })
   @ApiResponse({ status: 201, type: FundActionResponseDto })
   async withdrawFund(
