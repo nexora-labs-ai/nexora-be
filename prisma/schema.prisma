@@ -108,6 +108,7 @@ model User {
   itineraries          Itinerary[]           @relation("ItineraryCreatedBy")
   recommendations      Recommendation[]      @relation("RecommendationCreatedBy")
   aiConversations      AiConversation[]
+  groupMessages        GroupMessage[]
 
   @@map("users")
 }
@@ -187,6 +188,7 @@ model Group {
   itineraries     Itinerary[]
   recommendations Recommendation[]
   aiConversations AiConversation[]
+  groupMessages   GroupMessage[]
 
   @@map("groups")
 }
@@ -462,4 +464,19 @@ model AiMessage {
 
   @@index([conversationId, createdAt])
   @@map("ai_messages")
+}
+
+model GroupMessage {
+  id        String   @id @default(uuid()) @db.Uuid
+  groupId   String   @map("group_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([groupId, createdAt])
+  @@map("group_messages")
 }
