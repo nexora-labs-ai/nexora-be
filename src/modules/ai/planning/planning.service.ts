@@ -67,7 +67,7 @@ export class PlanningService {
   constructor(
     private readonly geminiService: GeminiService,
     private readonly prisma: PrismaService,
-  ) { }
+  ) {}
 
   async generateItinerary(params: {
     groupId: string;
@@ -134,15 +134,23 @@ Return exactly a JSON object (no markdown formatting) with the following structu
         createdBy: params.requestedBy,
         items: {
           createMany: {
-            data: plan.items.map((item) => ({
-              title: item.title,
-              description: item.description,
-              location: item.location,
-              startTime: new Date(`2024-01-01T${item.startTime || '09:00'}:00Z`),
-              endTime: new Date(`2024-01-01T${item.endTime || '11:00'}:00Z`),
-              estimatedCost: item.estimatedCost,
-              orderNo: (item.order || 1) + ((item.day || 1) - 1) * 100,
-            })),
+            data: plan.items.map((item: AiItineraryItem) => {
+              const startDate = new Date(); // Using today as base
+              const targetDate = new Date(startDate);
+              targetDate.setDate(startDate.getDate() + ((item.day || 1) - 1));
+              const dateStr = targetDate.toISOString().split('T')[0];
+
+              return {
+                title: item.title,
+                description: item.description,
+                location: item.location,
+                startTime: new Date(`${dateStr}T${item.startTime || '09:00'}:00Z`),
+                endTime: new Date(`${dateStr}T${item.endTime || '11:00'}:00Z`),
+                estimatedCost: item.estimatedCost,
+                orderNo: (item.order || 1) + ((item.day || 1) - 1) * 100,
+                travelTime: item.travelTime || 0,
+              };
+            }),
           },
         },
       },

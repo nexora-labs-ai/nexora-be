@@ -37,7 +37,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly mezonAuthService: MezonAuthService,
-  ) { }
+  ) {}
 
   async register(dto: RegisterDto): Promise<AuthTokens> {
     const existingUser = await this.usersService.findByEmail(dto.email);
@@ -181,13 +181,15 @@ export class AuthService {
       return user;
     }
 
-    return this.usersService.create({
-      email: mezonUser.email ?? `${mezonUser.sub}@mezon.provider`,
+    // Not found → Create new user with MEZON provider
+    const newUser = await this.usersService.create({
+      email: mezonUser.email || `${mezonUser.sub}@mezon.auth`,
       displayName: mezonUser.name ?? 'Mezon User',
       avatarUrl: mezonUser.picture,
       provider: AuthProvider.MEZON,
       providerId: mezonUser.sub,
     });
+    return newUser;
   }
 
   async refreshTokens(token: string): Promise<AuthTokens> {
