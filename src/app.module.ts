@@ -29,6 +29,7 @@ import { AiModule } from './modules/ai/ai.module';
 // Feature Modules
 import { AuthModule } from './modules/auth/auth.module';
 import { ExpensesModule } from './modules/expenses/expenses.module';
+import { GroupChatModule } from './modules/group-chat/group-chat.module';
 import { GroupsModule } from './modules/groups/groups.module';
 import { ItineraryModule } from './modules/itinerary/itinerary.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
@@ -100,6 +101,7 @@ import { UsersModule } from './modules/users/users.module';
     ItineraryModule,
     RecommendationsModule,
     AiModule,
+    GroupChatModule,
   ],
   providers: [
     {
