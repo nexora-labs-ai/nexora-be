@@ -38,7 +38,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly mezonAuthService: MezonAuthService,
-  ) { }
+  ) {}
 
   async register(dto: RegisterDto): Promise<AuthTokens> {
     const existingUser = await this.usersService.findByEmail(dto.email);
