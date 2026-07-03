@@ -37,7 +37,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly mezonAuthService: MezonAuthService,
-  ) { }
+  ) {}
 
   async register(dto: RegisterDto): Promise<AuthTokens> {
     const existingUser = await this.usersService.findByEmail(dto.email);
@@ -91,16 +91,9 @@ export class AuthService {
   }
 
   async validateGoogleUser(payload: GoogleUserPayload) {
-    const user = await this.usersService.findByEmail(payload.email);
-
-    if (!user) {
-      return this.usersService.create({
-        email: payload.email,
-        displayName: payload.displayName,
-        avatarUrl: payload.avatarUrl,
-        provider: AuthProvider.GOOGLE,
-        providerId: payload.providerId,
-      });
+    let user = await this.usersService.findByProvider(AuthProvider.GOOGLE, payload.providerId);
+    if (user) {
+      return user;
     }
 
     user = await this.usersService.findByEmail(payload.email);
@@ -196,6 +189,7 @@ export class AuthService {
       provider: AuthProvider.MEZON,
       providerId: mezonUser.sub,
     });
+    return newUser;
   }
 
   async refreshTokens(token: string): Promise<AuthTokens> {

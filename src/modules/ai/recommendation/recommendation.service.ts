@@ -64,9 +64,6 @@ Return only valid JSON.`;
     }
 
     // Store recommendations
-    const owner = await this.prisma.groupMember.findFirst({
-      where: { groupId, role: 'OWNER' },
-    });
     if (!owner) {
       this.logger.error('Cannot generate recommendations without a group owner');
       return;
@@ -83,7 +80,6 @@ Return only valid JSON.`;
         title: r.title,
         content: { body: r.content, priority: r.priority },
         expiresAt,
-        createdBy: owner.userId,
       })),
     });
   }
