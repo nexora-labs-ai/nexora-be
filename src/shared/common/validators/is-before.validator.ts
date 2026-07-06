@@ -9,15 +9,15 @@ import {
 @ValidatorConstraint({ name: 'isBefore', async: false })
 export class IsBeforeConstraint implements ValidatorConstraintInterface {
   validate(propertyValue: string, args: ValidationArguments) {
-    const relatedPropertyName = args.constraints[0];
-    const relatedValue = (args.object as any)[relatedPropertyName];
+    const relatedPropertyName = args.constraints[0] as string;
+    const relatedValue = args.object[relatedPropertyName as keyof typeof args.object];
 
     if (!propertyValue || !relatedValue) {
       return true; // Let other validators handle missing values
     }
 
     const valueDate = new Date(propertyValue);
-    const relatedDate = new Date(relatedValue);
+    const relatedDate = new Date(relatedValue as string | number | Date);
 
     // Check if dates are valid
     if (Number.isNaN(valueDate.getTime()) || Number.isNaN(relatedDate.getTime())) {

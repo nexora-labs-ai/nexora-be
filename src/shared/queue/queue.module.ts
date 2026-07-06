@@ -5,10 +5,8 @@ import { QUEUES } from './queue.constants';
 const mockQueueProvider = (queueName: string) => ({
   provide: getQueueToken(queueName),
   useValue: {
-    add: async (name: string, data: any) => {
-      console.log(`[Mock Queue ${queueName}] add job ${name}`);
-      return { id: `mock-${Date.now()}` };
-    },
+    add: async (name: string, data: any) =>
+      console.log(`[Mock Queue ${queueName}] add job ${name}`),
     process: () => {},
     on: () => {},
   },
