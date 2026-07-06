@@ -32,11 +32,7 @@ export class GroupsRepository {
     });
   }
 
-  async findUserGroups(
-    userId: string,
-    page: number,
-    limit: number,
-  ): Promise<PaginatedResult<unknown>> {
+  async findUserGroups(userId: string, page: number, limit: number) {
     const where = {
       deletedAt: null,
       members: { some: { userId, leftAt: null } },

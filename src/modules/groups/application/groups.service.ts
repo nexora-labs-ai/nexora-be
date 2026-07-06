@@ -393,7 +393,7 @@ export class GroupsService {
 
     const group = this.toDomain(data);
     const member = data.members.find((m) => m.userId === requestingUserId);
-    if (!member || !['OWNER'].includes(member.role)) {
+    if (!member || member.role !== GroupRole.OWNER) {
       throw new ForbiddenError('Only the group owner can withdraw fund');
     }
 

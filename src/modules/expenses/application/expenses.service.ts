@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { ExpenseSplitType } from '@prisma/client';
+import { ExpenseSplitType, GroupRole } from '@prisma/client';
 import { ForbiddenError, NotFoundError } from '../../../shared/common/domain-errors';
 import { Money } from '../../../shared/common/value-objects/money';
 import { CacheService } from '../../../shared/infrastructure/cache/cache.service';
@@ -54,9 +54,7 @@ export class ExpensesService {
   async createExpense(dto: CreateExpenseDto, payerId: string) {
     // Verify payer is group member
     const group = await this.groupsService.getGroup(dto.groupId, payerId);
-    const allowedUserIds = new Set(
-      (group as unknown as { members: { userId: string }[] }).members.map((m) => m.userId),
-    );
+    const allowedUserIds = new Set(group.members.map((m) => m.userId));
 
     const total = Money.of(dto.amount, dto.currency ?? 'USD');
 
@@ -65,9 +63,7 @@ export class ExpensesService {
 
     if (dto.splitType === ExpenseSplitType.SHARES && !dto.splits?.length) {
       // Auto-split equally among all members by giving 1 share
-      const participants = (group as unknown as { members: { userId: string }[] }).members.map(
-        (m) => ({ userId: m.userId, shares: 1 }),
-      );
+      const participants = group.members.map((m) => ({ userId: m.userId, shares: 1 }));
       splits = ExpenseSplitter.split(total, participants, ExpenseSplitType.SHARES, allowedUserIds);
     } else {
       const participants = dto.splits ?? [];
@@ -126,8 +122,10 @@ export class ExpensesService {
     // Only creator can edit
     if (expense.createdBy !== requestingUserId) {
       const group = await this.groupsService.getGroup(expense.groupId!, requestingUserId);
-      const members = (group as unknown as { members: { userId: string; role: string }[] }).members;
-      const isOwner = members.some((m) => m.userId === requestingUserId && m.role === 'OWNER');
+      const members = group.members;
+      const isOwner = members.some(
+        (m) => m.userId === requestingUserId && m.role === GroupRole.OWNER,
+      );
       if (!isOwner) throw new ForbiddenError('Only the creator or group owner can edit an expense');
     }
 
@@ -141,14 +139,10 @@ export class ExpensesService {
     // If amount, splitType, or splits change, recalculate
     if (dto.amount !== undefined || dto.splitType !== undefined || dto.splits !== undefined) {
       const group = await this.groupsService.getGroup(expense.groupId!, requestingUserId);
-      const allowedUserIds = new Set(
-        (group as unknown as { members: { userId: string }[] }).members.map((m) => m.userId),
-      );
+      const allowedUserIds = new Set(group.members.map((m) => m.userId));
 
       if (splitType === ExpenseSplitType.SHARES && !dto.splits?.length && !expense.splits?.length) {
-        const participants = (group as unknown as { members: { userId: string }[] }).members.map(
-          (m) => ({ userId: m.userId, shares: 1 }),
-        );
+        const participants = group.members.map((m) => ({ userId: m.userId, shares: 1 }));
         splits = ExpenseSplitter.split(total, participants, splitType, allowedUserIds);
       } else {
         const participants =
@@ -197,8 +191,10 @@ export class ExpensesService {
     // Only creator can delete
     if (expense.createdBy !== requestingUserId) {
       const group = await this.groupsService.getGroup(expense.groupId!, requestingUserId);
-      const members = (group as unknown as { members: { userId: string; role: string }[] }).members;
-      const isOwner = members.some((m) => m.userId === requestingUserId && m.role === 'OWNER');
+      const members = group.members;
+      const isOwner = members.some(
+        (m) => m.userId === requestingUserId && m.role === GroupRole.OWNER,
+      );
       if (!isOwner)
         throw new ForbiddenError('Only the creator or group owner can delete an expense');
     }
