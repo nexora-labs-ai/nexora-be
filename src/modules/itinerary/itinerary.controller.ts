@@ -38,34 +38,34 @@ class GenerateItineraryDto {
 @ApiBearerAuth()
 @Controller({ path: 'itinerary', version: '1' })
 export class ItineraryController {
-  constructor(private readonly itineraryService: ItineraryService) { }
+  constructor(private readonly itineraryService: ItineraryService) {}
 
-  @Get()
+  @Get('groups/:groupId')
   @UseGuards(GroupRoleGuard)
   @RequireGroupRole(GroupRole.MEMBER)
   @ApiOperation({ summary: 'Get group itineraries' })
-  findAll(@Query('groupId', ParseUUIDPipe) groupId: string) {
+  findAll(@Param('groupId', ParseUUIDPipe) groupId: string) {
     return this.itineraryService.getGroupItineraries(groupId);
   }
 
-  @Post()
+  @Post('groups/:groupId')
   @UseGuards(GroupRoleGuard)
   @RequireGroupRole(GroupRole.MEMBER)
   @ApiOperation({ summary: 'Create an itinerary' })
   create(
-    @Query('groupId', ParseUUIDPipe) groupId: string,
+    @Param('groupId', ParseUUIDPipe) groupId: string,
     @Body() dto: CreateItineraryDto,
     @CurrentUser('id') userId: string,
   ) {
     return this.itineraryService.createItinerary(groupId, dto, userId);
   }
 
-  @Post('generate')
+  @Post('groups/:groupId/generate')
   @UseGuards(GroupRoleGuard)
   @RequireGroupRole(GroupRole.MEMBER)
   @ApiOperation({ summary: 'Generate AI itinerary' })
   generate(
-    @Query('groupId', ParseUUIDPipe) groupId: string,
+    @Param('groupId', ParseUUIDPipe) groupId: string,
     @Body() dto: GenerateItineraryDto,
     @CurrentUser('id') userId: string,
   ) {
