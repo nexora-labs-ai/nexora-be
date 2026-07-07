@@ -7,8 +7,8 @@ import * as bcrypt from 'bcryptjs';
 import { addDays } from 'date-fns';
 import { OAuth2Client } from 'google-auth-library';
 import { ConflictError, UnauthorizedError } from '../../shared/common/domain-errors';
+import { generateProviderEmail } from '../../shared/common/utils/provider.utils';
 import { UsersService } from '../users/users.service';
-import { getEmailOrDefault } from './auth.helpers';
 import { AuthRepository } from './auth.repository';
 import { RegisterDto } from './dto/register.dto';
 import { MezonAuthService, MezonUserInfo } from './mezon-auth.service';
@@ -97,7 +97,8 @@ export class AuthService {
       return user;
     }
 
-    const emailToUse = getEmailOrDefault(payload.email, AuthProvider.GOOGLE, payload.providerId);
+    const emailToUse =
+      payload.email || generateProviderEmail(AuthProvider.GOOGLE, payload.providerId);
 
     user = await this.usersService.findByEmail(emailToUse);
     if (user) {
@@ -184,7 +185,7 @@ export class AuthService {
       return user;
     }
 
-    const emailToUse = getEmailOrDefault(mezonUser.email, AuthProvider.MEZON, mezonUser.sub);
+    const emailToUse = mezonUser.email || generateProviderEmail(AuthProvider.MEZON, mezonUser.sub);
 
     // Check if a user with this email already exists
     user = await this.usersService.findByEmail(emailToUse);
