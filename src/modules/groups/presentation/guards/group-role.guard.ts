@@ -24,8 +24,23 @@ export class GroupRoleGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest();
     const user = request.user;
-    const groupId =
-      request.params.id || request.params.groupId || request.query.groupId || request.body?.groupId;
+
+    // Collect all group IDs from all sources
+    const foundGroupIds = new Set<string>();
+
+    if (request.params?.id) foundGroupIds.add(request.params.id);
+    if (request.params?.groupId) foundGroupIds.add(request.params.groupId);
+    if (request.query?.groupId) foundGroupIds.add(request.query.groupId);
+    if (request.body?.groupId) foundGroupIds.add(request.body.groupId);
+
+    // Check for Parameter Pollution
+    if (foundGroupIds.size > 1) {
+      throw new ForbiddenError(
+        'Security Alert: Multiple conflicting Group IDs detected in request',
+      );
+    }
+
+    const groupId = foundGroupIds.size === 1 ? Array.from(foundGroupIds)[0] : undefined;
 
     if (!user || !user.id) {
       throw new ForbiddenError('User not authenticated');

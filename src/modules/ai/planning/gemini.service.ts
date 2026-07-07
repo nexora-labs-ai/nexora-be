@@ -21,52 +21,82 @@ export class GeminiService {
 
   async generateJsonContent<T = Record<string, string | number | boolean | object>>(
     prompt: string,
+    maxRetries = 2,
   ): Promise<T> {
     if (!this.apiKey) {
       throw new Error('Gemini API key is not configured');
     }
 
-    try {
-      const abortController = new AbortController();
-      const timeoutId = setTimeout(() => abortController.abort(), 60000);
+    let attempt = 0;
+    while (attempt <= maxRetries) {
+      attempt++;
+      try {
+        const abortController = new AbortController();
+        const timeoutId = setTimeout(() => abortController.abort(), 60000);
 
-      const response = await fetch(this.apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': this.apiKey,
-        },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            responseMimeType: 'application/json',
-            temperature: 0.7,
+        const response = await fetch(this.apiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': this.apiKey,
           },
-        }),
-        signal: abortController.signal,
-      });
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              responseMimeType: 'application/json',
+              temperature: 0.7,
+              maxOutputTokens: 8192,
+            },
+          }),
+          signal: abortController.signal,
+        });
 
-      clearTimeout(timeoutId);
+        clearTimeout(timeoutId);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        this.logger.error(`Gemini API error: ${response.status} - ${errorText}`);
-        throw new Error(`Gemini API failed with status ${response.status}`);
+        if (!response.ok) {
+          const errorText = await response.text();
+          this.logger.error(`Gemini API error: ${response.status} - ${errorText}`);
+          throw new Error(`Gemini API failed with status ${response.status}`);
+        }
+
+        const data = (await response.json()) as {
+          candidates?: {
+            content?: { parts?: { text?: string }[] };
+            finishReason?: string;
+          }[];
+        };
+
+        const candidate = data?.candidates?.[0];
+        const textResponse = candidate?.content?.parts?.[0]?.text;
+
+        if (!textResponse) {
+          throw new Error('Invalid response structure from Gemini API');
+        }
+
+        if (candidate?.finishReason === 'MAX_TOKENS') {
+          this.logger.warn('Gemini API response was truncated due to MAX_TOKENS limit.');
+        }
+
+        let cleanedText = textResponse.trim();
+        if (cleanedText.startsWith('```')) {
+          cleanedText = cleanedText
+            .replace(/^```(?:json)?\n?/i, '')
+            .replace(/\n?```$/i, '')
+            .trim();
+        }
+
+        return JSON.parse(cleanedText);
+      } catch (error) {
+        if (attempt <= maxRetries && error instanceof SyntaxError) {
+          this.logger.warn(
+            `JSON parse error on attempt ${attempt} (${(error as Error).message}). Retrying...`,
+          );
+          continue;
+        }
+        this.logger.error(`Error calling Gemini API on attempt ${attempt}`, error);
+        throw error;
       }
-
-      const data = (await response.json()) as {
-        candidates?: { content?: { parts?: { text?: string }[] } }[];
-      };
-
-      const textResponse = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!textResponse) {
-        throw new Error('Invalid response structure from Gemini API');
-      }
-
-      return JSON.parse(textResponse);
-    } catch (error) {
-      this.logger.error('Error calling Gemini API', error);
-      throw error;
     }
+    throw new Error('Failed to generate valid JSON content after multiple attempts');
   }
 }
