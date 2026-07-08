@@ -38,7 +38,7 @@ class GenerateItineraryDto {
 @ApiBearerAuth()
 @Controller({ path: 'itinerary', version: '1' })
 export class ItineraryController {
-  constructor(private readonly itineraryService: ItineraryService) { }
+  constructor(private readonly itineraryService: ItineraryService) {}
 
   @Get('groups/:groupId')
   @UseGuards(GroupRoleGuard)
@@ -57,7 +57,7 @@ export class ItineraryController {
     @Body() dto: CreateItineraryDto,
     @CurrentUser('id') userId: string,
   ) {
-    return this.itineraryService.createItinerary(groupId, userId, dto);
+    return this.itineraryService.createItinerary(groupId, dto, userId);
   }
 
   @Post('groups/:groupId/generate')

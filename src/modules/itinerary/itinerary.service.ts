@@ -12,7 +12,7 @@ export class ItineraryService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly planningService: PlanningService,
-  ) { }
+  ) {}
 
   private async assertItineraryAccess(itineraryId: string, userId: string) {
     const it = await this.prisma.itinerary.findUnique({
@@ -38,7 +38,7 @@ export class ItineraryService {
     });
   }
 
-  async createItinerary(groupId: string, userId: string, dto: CreateItineraryDto) {
+  async createItinerary(groupId: string, dto: CreateItineraryDto, userId: string) {
     return this.prisma.itinerary.create({
       data: {
         groupId,
@@ -47,7 +47,7 @@ export class ItineraryService {
         description: dto.description,
         startDate: dto.startDate ? new Date(dto.startDate) : new Date(),
         endDate: dto.endDate ? new Date(dto.endDate) : new Date(),
-        destination: dto.destination ?? 'Unknown Destination',
+        destination: dto.destination || 'Unknown Destination',
         status: ItineraryStatus.DRAFT,
       },
     });
