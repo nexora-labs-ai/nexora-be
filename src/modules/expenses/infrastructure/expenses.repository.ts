@@ -84,9 +84,7 @@ export class ExpensesRepository {
         else throw new Error('No default category found');
       }
 
-      // 1. Group fund balance check will be done atomically during deduction
-
-      // 2. Create Expense
+      // 1. Create Expense
       const expense = await tx.expense.create({
         data: {
           groupId: data.groupId,
@@ -102,7 +100,7 @@ export class ExpensesRepository {
         },
       });
 
-      // 3. Handle Funding Source Specifics
+      // 2. Handle Funding Source Specifics
       if (data.fundingSource === FundingSource.PERSONAL) {
         await tx.expensePayer.create({
           data: {
