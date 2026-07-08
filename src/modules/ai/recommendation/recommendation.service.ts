@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { RecommendationType } from '@prisma/client';
 import { PrismaService } from '../../../shared/database/prisma.service';
 import { AI_PORT, AiPort } from '../../../shared/infrastructure/ports/ai.port';
 
@@ -9,11 +10,11 @@ export class RecommendationAiService {
   constructor(
     @Inject(AI_PORT) private readonly aiPort: AiPort,
     private readonly prisma: PrismaService,
-  ) {}
+  ) { }
 
   async generateExpenseRecommendations(groupId: string): Promise<void> {
     // Fetch context data
-    const [expenses, members] = await Promise.all([
+    const [expenses, membersCount, owner] = await Promise.all([
       this.prisma.expense.findMany({
         where: { groupId, deletedAt: null },
         include: { category: true, splits: true },
@@ -21,6 +22,7 @@ export class RecommendationAiService {
         take: 50,
       }),
       this.prisma.groupMember.count({ where: { groupId } }),
+      this.prisma.groupMember.findFirst({ where: { groupId, role: 'OWNER' } }),
     ]);
 
     const totalSpent = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
@@ -36,7 +38,7 @@ export class RecommendationAiService {
     const prompt = `
 Analyze the following group expense data and provide 3-5 actionable recommendations:
 
-Group: ${members} members
+Group: ${membersCount} members
 Total spent: ${totalSpent}
 Spending by category: ${JSON.stringify(byCategory, null, 2)}
 
@@ -62,10 +64,7 @@ Return only valid JSON.`;
       return;
     }
 
-    // Store recommendations
-    const owner = await this.prisma.groupMember.findFirst({
-      where: { groupId, role: 'OWNER' },
-    });
+    // Owner is already fetched at the beginning of the function
     if (!owner) {
       this.logger.error('Cannot generate recommendations without a group owner');
       return;
@@ -77,11 +76,14 @@ Return only valid JSON.`;
     await this.prisma.recommendation.createMany({
       data: recommendations.map((r) => ({
         groupId,
-        type: (r.type.toUpperCase() as any) || 'ACTIVITY',
+        createdBy: owner.userId,
+        type:
+          RecommendationType[r.type.toUpperCase() as keyof typeof RecommendationType] ||
+          RecommendationType.ACTIVITY,
         title: r.title,
         content: { body: r.content, priority: r.priority },
         expiresAt,
-        createdBy: owner.userId,
+
       })),
     });
   }

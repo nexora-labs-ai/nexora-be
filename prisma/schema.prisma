@@ -412,6 +412,7 @@ model ItineraryItem {
   estimatedCost Decimal? @db.Decimal(18, 2) @map("estimated_cost")
   orderNo       Int      @map("order_no")
   notes         String?
+  travelTime    Int?     @map("travel_time")
 
   itinerary Itinerary @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
 
