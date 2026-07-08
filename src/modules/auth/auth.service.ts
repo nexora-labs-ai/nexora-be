@@ -7,6 +7,7 @@ import * as bcrypt from 'bcryptjs';
 import { addDays } from 'date-fns';
 import { OAuth2Client } from 'google-auth-library';
 import { ConflictError, UnauthorizedError } from '../../shared/common/domain-errors';
+import { generateProviderEmail } from '../../shared/common/utils/provider.utils';
 import { UsersService } from '../users/users.service';
 import { AuthRepository } from './auth.repository';
 import { RegisterDto } from './dto/register.dto';
@@ -96,14 +97,17 @@ export class AuthService {
       return user;
     }
 
-    user = await this.usersService.findByEmail(payload.email);
+    const emailToUse =
+      payload.email || generateProviderEmail(AuthProvider.GOOGLE, payload.providerId);
+
+    user = await this.usersService.findByEmail(emailToUse);
     if (user) {
       await this.usersService.linkAuthAccount(user.id, AuthProvider.GOOGLE, payload.providerId);
       return user;
     }
 
     return this.usersService.create({
-      email: payload.email,
+      email: emailToUse,
       displayName: payload.displayName,
       avatarUrl: payload.avatarUrl,
       provider: AuthProvider.GOOGLE,
@@ -176,18 +180,30 @@ export class AuthService {
    * Pattern: Find by email first, if not found then create new with AuthProvider.MEZON
    */
   async validateMezonUser(mezonUser: MezonUserInfo) {
-    const user = await this.usersService.findByProvider(AuthProvider.MEZON, mezonUser.sub);
+    let user = await this.usersService.findByProvider(AuthProvider.MEZON, mezonUser.sub);
     if (user) {
       return user;
     }
 
-    return this.usersService.create({
-      email: mezonUser.email ?? `${mezonUser.sub}@mezon.provider`,
+    const emailToUse = mezonUser.email || generateProviderEmail(AuthProvider.MEZON, mezonUser.sub);
+
+    // Check if a user with this email already exists
+    user = await this.usersService.findByEmail(emailToUse);
+    if (user) {
+      // Link the new Mezon auth account to the existing user
+      await this.usersService.linkAuthAccount(user.id, AuthProvider.MEZON, mezonUser.sub);
+      return user;
+    }
+
+    // Not found → Create new user with MEZON provider
+    const newUser = await this.usersService.create({
+      email: emailToUse,
       displayName: mezonUser.name ?? 'Mezon User',
       avatarUrl: mezonUser.picture,
       provider: AuthProvider.MEZON,
       providerId: mezonUser.sub,
     });
+    return newUser;
   }
 
   async refreshTokens(token: string): Promise<AuthTokens> {
