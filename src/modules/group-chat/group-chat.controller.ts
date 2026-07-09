@@ -1,11 +1,15 @@
 import { JwtAuthGuard } from '@/shared/common/guards/jwt-auth.guard';
 import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { GroupRole } from '@prisma/client';
+import { RequireGroupRole } from '../groups/presentation/guards/group-role.decorator';
+import { GroupRoleGuard } from '../groups/presentation/guards/group-role.guard';
 import { GroupChatService } from './group-chat.service';
 
 @ApiTags('Group Chat')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, GroupRoleGuard)
+@RequireGroupRole(GroupRole.MEMBER)
 @Controller('groups/:groupId/messages')
 export class GroupChatController {
   constructor(private readonly groupChatService: GroupChatService) {}
