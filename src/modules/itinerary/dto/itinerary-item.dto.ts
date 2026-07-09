@@ -14,4 +14,4 @@ export class CreateItineraryItemDto {
   @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) travelTime?: number;
 }
 
-export class UpdateItineraryItemDto extends PartialType(CreateItineraryItemDto) {}
+export class UpdateItineraryItemDto extends PartialType(CreateItineraryItemDto) { }

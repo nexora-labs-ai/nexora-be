@@ -9,7 +9,7 @@ import { ItineraryService } from './itinerary.service';
 @ApiBearerAuth()
 @Controller({ path: 'itinerary/:itineraryId/items', version: '1' })
 export class ItineraryItemController {
-  constructor(private readonly itineraryService: ItineraryService) {}
+  constructor(private readonly itineraryService: ItineraryService) { }
 
   @Post()
   @ApiOperation({ summary: 'Add an item to itinerary' })

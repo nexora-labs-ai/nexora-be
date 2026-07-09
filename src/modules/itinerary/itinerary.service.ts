@@ -12,7 +12,7 @@ export class ItineraryService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly planningService: PlanningService,
-  ) { }
+  ) {}
 
   private async assertItineraryAccess(itineraryId: string, userId: string) {
     const it = await this.prisma.itinerary.findUnique({
