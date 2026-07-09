@@ -44,13 +44,11 @@ export class WsJwtGuard implements CanActivate {
     // Check auth handshake payload
     let token = client.handshake.auth?.token;
 
-    // Fallback to headers or query if auth isn't provided
+    // Fallback to headers if auth isn't provided
     if (!token) {
       const authHeader = client.handshake.headers?.authorization;
       if (authHeader?.startsWith('Bearer ')) {
         token = authHeader.split(' ')[1];
-      } else if (client.handshake.query?.token) {
-        token = client.handshake.query.token as string;
       }
     }
 
