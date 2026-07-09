@@ -16,7 +16,6 @@ export class CategoriesController {
     type: [CategoryResponseDto],
     description: 'Returns a list of categories',
   })
-  @Header('Cache-Control', 'public, max-age=86400') // Cache for 24 hours
   async findAll() {
     const categories = await this.expensesService.getCategories();
     return categories.map((c) => ({

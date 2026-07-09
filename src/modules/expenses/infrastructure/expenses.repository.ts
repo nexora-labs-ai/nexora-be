@@ -14,13 +14,23 @@ export class ExpensesRepository {
       include: {
         payers: {
           where: { user: { deletedAt: null } },
-          include: { user: { include: { profile: true } } },
+          include: {
+            user: {
+              select: { id: true, profile: { select: { displayName: true, avatarUrl: true } } },
+            },
+          },
         },
         splits: {
           where: { user: { deletedAt: null } },
-          include: { user: { include: { profile: true } } },
+          include: {
+            user: {
+              select: { id: true, profile: { select: { displayName: true, avatarUrl: true } } },
+            },
+          },
         },
-        category: true,
+        category: {
+          select: { id: true, name: true, icon: true, color: true },
+        },
       },
     });
   }
@@ -44,13 +54,23 @@ export class ExpensesRepository {
         include: {
           payers: {
             where: { user: { deletedAt: null } },
-            include: { user: { include: { profile: true } } },
+            include: {
+              user: {
+                select: { id: true, profile: { select: { displayName: true, avatarUrl: true } } },
+              },
+            },
           },
           splits: {
             where: { user: { deletedAt: null } },
-            include: { user: { include: { profile: true } } },
+            include: {
+              user: {
+                select: { id: true, profile: { select: { displayName: true, avatarUrl: true } } },
+              },
+            },
           },
-          category: true,
+          category: {
+            select: { id: true, name: true, icon: true, color: true },
+          },
         },
         orderBy: { date: 'desc' },
         ...buildPrismaSkipTake(page, limit),
@@ -76,15 +96,25 @@ export class ExpensesRepository {
     },
     splits: { userId: string; amount: number; shares?: number }[],
   ) {
-    return this.prisma.$transaction(async (tx) => {
-      let categoryId = data.categoryId;
-      if (!categoryId) {
-        const defaultCategory = await tx.category.findFirst({ where: { isDefault: true } });
-        if (defaultCategory) categoryId = defaultCategory.id;
-        else throw new Error('No default category found');
-      }
+    let categoryId = data.categoryId;
+    if (!categoryId) {
+      const defaultCategory = await this.prisma.category.findFirst({ where: { isDefault: true } });
+      if (defaultCategory) categoryId = defaultCategory.id;
+      else throw new Error('No default category found');
+    }
 
-      // 1. Create Expense
+    let fundId: string | undefined;
+    if (data.fundingSource === FundingSource.GROUP_FUND) {
+      const fund = await this.prisma.groupFund.findUnique({
+        where: { groupId: data.groupId },
+        select: { id: true },
+      });
+      if (!fund) throw new BusinessRuleError('Group fund not found');
+      fundId = fund.id;
+    }
+
+    const expenseId = await this.prisma.$transaction(async (tx) => {
+      // 1. Create Expense, Payers, and Splits in a single query
       const expense = await tx.expense.create({
         data: {
           groupId: data.groupId,
@@ -94,23 +124,29 @@ export class ExpensesRepository {
           amount: data.amount,
           currency: data.currency as Currency,
           splitType: data.splitType,
-          categoryId: data.categoryId,
+          categoryId: categoryId,
           fundingSource: data.fundingSource,
           date: data.date ?? new Date(),
+
+          payers:
+            data.fundingSource === FundingSource.PERSONAL
+              ? { create: [{ userId: data.createdBy, amount: data.amount }] }
+              : undefined,
+
+          splits: {
+            createMany: {
+              data: splits.map((s) => ({
+                userId: s.userId,
+                amount: s.amount,
+                shares: s.shares,
+              })),
+            },
+          },
         },
       });
 
-      // 2. Handle Funding Source Specifics
-      if (data.fundingSource === FundingSource.PERSONAL) {
-        await tx.expensePayer.create({
-          data: {
-            expenseId: expense.id,
-            userId: data.createdBy,
-            amount: data.amount,
-          },
-        });
-      } else if (data.fundingSource === FundingSource.GROUP_FUND) {
-        // Deduct from fund atomically
+      // 2. Handle Group Fund Deduction
+      if (data.fundingSource === FundingSource.GROUP_FUND) {
         const res = await tx.groupFund.updateMany({
           where: { groupId: data.groupId, balance: { gte: data.amount } },
           data: { balance: { decrement: data.amount } },
@@ -120,14 +156,9 @@ export class ExpensesRepository {
           throw new BusinessRuleError('Insufficient group fund balance');
         }
 
-        const updatedFund = await tx.groupFund.findUniqueOrThrow({
-          where: { groupId: data.groupId },
-        });
-
-        // Record transaction
         await tx.fundTransaction.create({
           data: {
-            fundId: updatedFund.id,
+            fundId: fundId!,
             createdBy: data.createdBy,
             expenseId: expense.id,
             type: 'EXPENSE',
@@ -137,24 +168,32 @@ export class ExpensesRepository {
         });
       }
 
-      // 4. Create Splits
-      await tx.expenseSplit.createMany({
-        data: splits.map((s) => ({
-          expenseId: expense.id,
-          userId: s.userId,
-          amount: s.amount,
-          shares: s.shares,
-        })),
-      });
+      return expense.id;
+    });
 
-      return tx.expense.findFirstOrThrow({
-        where: { id: expense.id },
-        include: {
-          payers: { include: { user: { include: { profile: true } } } },
-          splits: { include: { user: { include: { profile: true } } } },
-          category: true,
+    return this.prisma.expense.findFirstOrThrow({
+      where: { id: expenseId },
+      include: {
+        payers: {
+          where: { user: { deletedAt: null } },
+          include: {
+            user: {
+              select: { id: true, profile: { select: { displayName: true, avatarUrl: true } } },
+            },
+          },
         },
-      });
+        splits: {
+          where: { user: { deletedAt: null } },
+          include: {
+            user: {
+              select: { id: true, profile: { select: { displayName: true, avatarUrl: true } } },
+            },
+          },
+        },
+        category: {
+          select: { id: true, name: true, icon: true, color: true },
+        },
+      },
     });
   }
 
@@ -172,15 +211,31 @@ export class ExpensesRepository {
     }>,
     splits?: { userId: string; amount: number; shares?: number }[],
   ) {
-    return this.prisma.$transaction(async (tx) => {
-      const oldExpense = await tx.expense.findFirstOrThrow({
-        where: { id },
-        include: { payers: true },
+    // Fetch old state and fundId outside the transaction to minimize lock time
+    const oldExpense = await this.prisma.expense.findFirstOrThrow({
+      where: { id },
+      include: { payers: true },
+    });
+
+    const newAmount = data.amount ?? Number(oldExpense.amount);
+    const newFundingSource = data.fundingSource ?? oldExpense.fundingSource;
+
+    let fundId: string | undefined;
+    if (
+      newFundingSource === FundingSource.GROUP_FUND ||
+      oldExpense.fundingSource === FundingSource.GROUP_FUND
+    ) {
+      const fund = await this.prisma.groupFund.findUnique({
+        where: { groupId: oldExpense.groupId as string },
+        select: { id: true },
       });
+      if (!fund && newFundingSource === FundingSource.GROUP_FUND) {
+        throw new BusinessRuleError('Group fund not found');
+      }
+      fundId = fund?.id;
+    }
 
-      const newAmount = data.amount ?? Number(oldExpense.amount);
-      const newFundingSource = data.fundingSource ?? oldExpense.fundingSource;
-
+    await this.prisma.$transaction(async (tx) => {
       // Handle Group Fund changes
       if (oldExpense.fundingSource === FundingSource.GROUP_FUND) {
         // Refund old amount
@@ -204,12 +259,9 @@ export class ExpensesRepository {
           throw new BusinessRuleError('Insufficient group fund balance for update');
         }
 
-        const fund = await tx.groupFund.findUniqueOrThrow({
-          where: { groupId: oldExpense.groupId as string },
-        });
         await tx.fundTransaction.create({
           data: {
-            fundId: fund.id,
+            fundId: fundId!,
             createdBy: oldExpense.createdBy,
             expenseId: id,
             type: 'EXPENSE',
@@ -219,7 +271,7 @@ export class ExpensesRepository {
         });
       }
 
-      const expense = await tx.expense.update({
+      await tx.expense.update({
         where: { id },
         data: {
           title: data.title,
@@ -230,47 +282,56 @@ export class ExpensesRepository {
           fundingSource: data.fundingSource,
           categoryId: data.categoryId,
           date: data.date,
-        },
-        include: { payers: true },
-      });
 
-      if (newFundingSource === FundingSource.PERSONAL) {
-        if (oldExpense.payers.length > 0) {
-          await tx.expensePayer.updateMany({
-            where: { expenseId: id, userId: oldExpense.payers[0]!.userId },
-            data: { amount: newAmount },
-          });
-        } else {
-          // It was GROUP_FUND before, now PERSONAL, need to create payer
-          await tx.expensePayer.create({
-            data: { expenseId: id, userId: oldExpense.createdBy, amount: newAmount },
-          });
-        }
-      } else if (newFundingSource === FundingSource.GROUP_FUND) {
-        // Remove old payers if it changed from PERSONAL to GROUP_FUND
-        await tx.expensePayer.deleteMany({ where: { expenseId: id } });
-      }
+          // Nested Writes for Payers
+          payers: {
+            deleteMany: {}, // Delete all old payers
+            create:
+              newFundingSource === FundingSource.PERSONAL
+                ? [{ userId: oldExpense.createdBy, amount: newAmount }]
+                : [],
+          },
 
-      if (splits) {
-        await tx.expenseSplit.deleteMany({ where: { expenseId: id } });
-        await tx.expenseSplit.createMany({
-          data: splits.map((s) => ({
-            expenseId: id,
-            userId: s.userId,
-            amount: s.amount,
-            shares: s.shares,
-          })),
-        });
-      }
-
-      return tx.expense.findFirstOrThrow({
-        where: { id },
-        include: {
-          payers: { include: { user: { include: { profile: true } } } },
-          splits: { include: { user: { include: { profile: true } } } },
-          category: true,
+          // Nested Writes for Splits
+          splits: splits
+            ? {
+                deleteMany: {}, // Delete all old splits
+                createMany: {
+                  data: splits.map((s) => ({
+                    userId: s.userId,
+                    amount: s.amount,
+                    shares: s.shares,
+                  })),
+                },
+              }
+            : undefined,
         },
       });
+    });
+
+    return this.prisma.expense.findFirstOrThrow({
+      where: { id },
+      include: {
+        payers: {
+          where: { user: { deletedAt: null } },
+          include: {
+            user: {
+              select: { id: true, profile: { select: { displayName: true, avatarUrl: true } } },
+            },
+          },
+        },
+        splits: {
+          where: { user: { deletedAt: null } },
+          include: {
+            user: {
+              select: { id: true, profile: { select: { displayName: true, avatarUrl: true } } },
+            },
+          },
+        },
+        category: {
+          select: { id: true, name: true, icon: true, color: true },
+        },
+      },
     });
   }
 
