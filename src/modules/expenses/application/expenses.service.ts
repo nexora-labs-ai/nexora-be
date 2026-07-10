@@ -43,7 +43,7 @@ export class ExpensesService {
   }
 
   async getExpense(id: string, requestingUserId: string) {
-    const expense = await this.expensesRepository.findById(id);
+    const expense = await this.expensesRepository.findWithDetails(id);
     if (!expense) throw new NotFoundError('Expense', id);
 
     // Verify membership
@@ -141,13 +141,19 @@ export class ExpensesService {
       const group = await this.groupsService.getGroup(expense.groupId!, requestingUserId);
       const allowedUserIds = new Set(group.members.map((m) => m.userId));
 
-      if (splitType === ExpenseSplitType.SHARES && !dto.splits?.length && !expense.splits?.length) {
+      let oldSplits: { userId: string; amount: number | string | any; shares?: number | null }[] =
+        [];
+      if (!dto.splits?.length) {
+        oldSplits = await this.expensesRepository.findSplitsByExpenseId(id);
+      }
+
+      if (splitType === ExpenseSplitType.SHARES && !dto.splits?.length && !oldSplits?.length) {
         const participants = group.members.map((m) => ({ userId: m.userId, shares: 1 }));
         splits = ExpenseSplitter.split(total, participants, splitType, allowedUserIds);
       } else {
         const participants =
           dto.splits ??
-          expense.splits.map((s) => ({
+          oldSplits.map((s) => ({
             userId: s.userId!,
             amount: Number(s.amount),
             shares: s.shares ?? undefined,

@@ -11,27 +11,22 @@ export class ExpensesRepository {
   async findById(id: string) {
     return this.prisma.expense.findUnique({
       where: { id, deletedAt: null },
+    });
+  }
+
+  async findWithDetails(id: string) {
+    return this.prisma.expense.findUnique({
+      where: { id, deletedAt: null },
       include: {
-        payers: {
-          where: { user: { deletedAt: null } },
-          include: {
-            user: {
-              select: { id: true, profile: { select: { displayName: true, avatarUrl: true } } },
-            },
-          },
-        },
-        splits: {
-          where: { user: { deletedAt: null } },
-          include: {
-            user: {
-              select: { id: true, profile: { select: { displayName: true, avatarUrl: true } } },
-            },
-          },
-        },
-        category: {
-          select: { id: true, name: true, icon: true, color: true },
-        },
+        payers: true,
+        splits: true,
       },
+    });
+  }
+
+  async findSplitsByExpenseId(id: string) {
+    return this.prisma.expenseSplit.findMany({
+      where: { expenseId: id },
     });
   }
 
@@ -52,25 +47,8 @@ export class ExpensesRepository {
       this.prisma.expense.findMany({
         where,
         include: {
-          payers: {
-            where: { user: { deletedAt: null } },
-            include: {
-              user: {
-                select: { id: true, profile: { select: { displayName: true, avatarUrl: true } } },
-              },
-            },
-          },
-          splits: {
-            where: { user: { deletedAt: null } },
-            include: {
-              user: {
-                select: { id: true, profile: { select: { displayName: true, avatarUrl: true } } },
-              },
-            },
-          },
-          category: {
-            select: { id: true, name: true, icon: true, color: true },
-          },
+          payers: true,
+          splits: true,
         },
         orderBy: { date: 'desc' },
         ...buildPrismaSkipTake(page, limit),
@@ -174,25 +152,8 @@ export class ExpensesRepository {
     return this.prisma.expense.findFirstOrThrow({
       where: { id: expenseId },
       include: {
-        payers: {
-          where: { user: { deletedAt: null } },
-          include: {
-            user: {
-              select: { id: true, profile: { select: { displayName: true, avatarUrl: true } } },
-            },
-          },
-        },
-        splits: {
-          where: { user: { deletedAt: null } },
-          include: {
-            user: {
-              select: { id: true, profile: { select: { displayName: true, avatarUrl: true } } },
-            },
-          },
-        },
-        category: {
-          select: { id: true, name: true, icon: true, color: true },
-        },
+        payers: true,
+        splits: true,
       },
     });
   }
@@ -214,7 +175,6 @@ export class ExpensesRepository {
     // Fetch old state and fundId outside the transaction to minimize lock time
     const oldExpense = await this.prisma.expense.findFirstOrThrow({
       where: { id },
-      include: { payers: true },
     });
 
     const newAmount = data.amount ?? Number(oldExpense.amount);
@@ -312,25 +272,8 @@ export class ExpensesRepository {
     return this.prisma.expense.findFirstOrThrow({
       where: { id },
       include: {
-        payers: {
-          where: { user: { deletedAt: null } },
-          include: {
-            user: {
-              select: { id: true, profile: { select: { displayName: true, avatarUrl: true } } },
-            },
-          },
-        },
-        splits: {
-          where: { user: { deletedAt: null } },
-          include: {
-            user: {
-              select: { id: true, profile: { select: { displayName: true, avatarUrl: true } } },
-            },
-          },
-        },
-        category: {
-          select: { id: true, name: true, icon: true, color: true },
-        },
+        payers: true,
+        splits: true,
       },
     });
   }
