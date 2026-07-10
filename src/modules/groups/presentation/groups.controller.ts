@@ -16,18 +16,21 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { GroupRole } from '@prisma/client';
 import { CurrentUser } from '../../../shared/common/decorators/current-user.decorator';
 import { PaginationQueryDto } from '../../../shared/common/dtos/pagination-query.dto';
 import { GroupsService } from '../application/groups.service';
 import { AddMemberDto } from './add-member.dto';
+import { ContributeFundDto } from './contribute-fund.dto';
 import { CreateGroupDto } from './create-group.dto';
+import { FundActionResponseDto } from './fund-response.dto';
 import { RequireGroupRole } from './guards/group-role.decorator';
 import { GroupRoleGuard } from './guards/group-role.guard';
 import { InviteMemberDto } from './invite-member.dto';
 import { UpdateGroupDto } from './update-group.dto';
 import { UpdateMemberRoleDto } from './update-member-role.dto';
+import { WithdrawFundDto } from './withdraw-fund.dto';
 
 @ApiTags('groups')
 @ApiBearerAuth()
@@ -163,5 +166,37 @@ export class GroupsController {
   @ApiOperation({ summary: 'Reject group invitation' })
   rejectInvitation(@Param('token') token: string, @CurrentUser('id') userId: string) {
     return this.groupsService.rejectInvitation(token, userId);
+  }
+
+  @Post(':id/fund/contribute')
+  @ApiOperation({ summary: 'Contribute to the group fund' })
+  @ApiResponse({ status: 201, type: FundActionResponseDto })
+  async contributeFund(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') userId: string,
+    @Body() dto: ContributeFundDto,
+  ) {
+    return this.groupsService.contributeFund(id, dto, userId);
+  }
+
+  @Post(':id/fund/withdraw')
+  @RequireGroupRole(GroupRole.OWNER)
+  @ApiOperation({ summary: 'Withdraw/Refund from the group fund' })
+  @ApiResponse({ status: 201, type: FundActionResponseDto })
+  async withdrawFund(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') userId: string,
+    @Body() dto: WithdrawFundDto,
+  ) {
+    return this.groupsService.withdrawFund(id, dto, userId);
+  }
+
+  @Get(':id/fund/transactions')
+  @ApiOperation({ summary: 'Get fund transactions history' })
+  async getFundTransactions(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.groupsService.getFundTransactions(id, userId);
   }
 }

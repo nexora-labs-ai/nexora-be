@@ -8,13 +8,15 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Put,
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../../shared/common/decorators/current-user.decorator';
-import { PaginationQueryDto } from '../../../shared/common/dtos/pagination-query.dto';
 import { ExpensesService } from '../application/expenses.service';
 import { CreateExpenseDto } from './create-expense.dto';
+import { GetGroupExpensesDto } from './get-group-expenses.dto';
+import { UpdateExpenseDto } from './update-expense.dto';
 
 @ApiTags('expenses')
 @ApiBearerAuth()
@@ -24,13 +26,9 @@ export class ExpensesController {
 
   @Get()
   @ApiOperation({ summary: 'Get group expenses' })
-  findGroupExpenses(
-    @Query('groupId', ParseUUIDPipe) groupId: string,
-    @Query() query: PaginationQueryDto,
-    @CurrentUser('id') userId: string,
-  ) {
+  findGroupExpenses(@Query() query: GetGroupExpensesDto, @CurrentUser('id') userId: string) {
     return this.expensesService.getGroupExpenses(
-      groupId,
+      query.groupId,
       userId,
       query.page ?? 1,
       query.limit ?? 20,
@@ -47,6 +45,16 @@ export class ExpensesController {
   @ApiOperation({ summary: 'Get expense by ID' })
   findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser('id') userId: string) {
     return this.expensesService.getExpense(id, userId);
+  }
+
+  @Put(':id')
+  @ApiOperation({ summary: 'Update expense' })
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') userId: string,
+    @Body() dto: UpdateExpenseDto,
+  ) {
+    return this.expensesService.updateExpense(id, dto, userId);
   }
 
   @Delete(':id')

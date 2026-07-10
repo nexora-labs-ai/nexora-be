@@ -1,6 +1,6 @@
 import { Injectable, Logger, UnprocessableEntityException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { v2 as cloudinary } from 'cloudinary';
+import { UploadApiErrorResponse, UploadApiResponse, v2 as cloudinary } from 'cloudinary';
 import * as streamifier from 'streamifier';
 import {
   GetPresignedUrlRequest,
@@ -38,7 +38,7 @@ export class CloudinaryAdapter implements StoragePort {
           overwrite: true,
           timeout: 15_000,
         },
-        (error, result) => {
+        (error: UploadApiErrorResponse | undefined, result: UploadApiResponse | undefined) => {
           if (error) {
             this.logger.error('Failed to upload file to Cloudinary', error);
             return reject(error);
@@ -60,13 +60,16 @@ export class CloudinaryAdapter implements StoragePort {
 
   async delete(key: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      cloudinary.uploader.destroy(key, (error, result) => {
-        if (error) {
-          this.logger.error(`Failed to delete file from Cloudinary: ${key}`, error);
-          return reject(error);
-        }
-        resolve();
-      });
+      cloudinary.uploader.destroy(
+        key,
+        (error: UploadApiErrorResponse | undefined, result: { result: string } | undefined) => {
+          if (error) {
+            this.logger.error(`Failed to delete file from Cloudinary: ${key}`, error);
+            return reject(error);
+          }
+          resolve();
+        },
+      );
     });
   }
 

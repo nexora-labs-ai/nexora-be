@@ -16,6 +16,14 @@ export class ExpenseDeletedEvent {
   ) {}
 }
 
+export class ExpenseUpdatedEvent {
+  constructor(
+    public readonly expenseId: string,
+    public readonly groupId: string,
+    public readonly updaterId: string,
+  ) {}
+}
+
 export const EXPENSE_EVENTS = {
   CREATED: 'expense.created',
   UPDATED: 'expense.updated',
