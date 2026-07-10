@@ -10,4 +10,4 @@ import { ItineraryService } from './itinerary.service';
   controllers: [ItineraryController, ItineraryItemController],
   providers: [ItineraryService],
 })
-export class ItineraryModule {}
+export class ItineraryModule { }

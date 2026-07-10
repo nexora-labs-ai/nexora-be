@@ -21,4 +21,4 @@ import { AiJobsProcessor } from './jobs/ai-jobs.processor';
   ],
   exports: [ChatService, MemoryService, PlanningService],
 })
-export class AiModule {}
+export class AiModule { }
