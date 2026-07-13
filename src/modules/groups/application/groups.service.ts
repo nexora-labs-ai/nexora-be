@@ -278,7 +278,10 @@ export class GroupsService {
     const group = this.toDomain(data);
     group.assertMember(requestingUserId); // Owner or member can invite
 
-    const userToInvite = await this.usersService.findByEmail(dto.email);
+    const userToInvite = dto.email.includes('@')
+      ? await this.usersService.findByEmail(dto.email)
+      : await this.usersService.findByUsername(dto.email);
+
     if (!userToInvite) {
       throw new NotFoundError('User', dto.email);
     }
