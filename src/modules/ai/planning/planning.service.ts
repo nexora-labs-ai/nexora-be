@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ItineraryItem, ItineraryStatus, Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { PrismaService } from '../../../shared/database/prisma.service';
-import { GeminiService } from './gemini.service';
+import { GeminiService } from '../providers/gemini.service';
 
 const AiItemSchema = z.object({
   day: z.coerce.number().int().min(1).max(60).default(1),
@@ -67,7 +67,7 @@ export class PlanningService {
   constructor(
     private readonly geminiService: GeminiService,
     private readonly prisma: PrismaService,
-  ) { }
+  ) {}
 
   async generateItinerary(params: {
     groupId: string;

@@ -5,6 +5,7 @@ import { ForbiddenError, NotFoundError } from '../../../shared/common/domain-err
 import { Money } from '../../../shared/common/value-objects/money';
 import { CacheService } from '../../../shared/infrastructure/cache/cache.service';
 import { RealtimeService } from '../../../shared/realtime/realtime.service';
+import { GeminiService } from '../../ai/providers/gemini.service';
 import { GroupsService } from '../../groups/application/groups.service';
 import { ExpenseSplitter } from '../domain/expense-splitter';
 import { EXPENSE_EVENTS, ExpenseCreatedEvent, ExpenseUpdatedEvent } from '../domain/expense.events';
@@ -22,6 +23,7 @@ export class ExpensesService {
     private readonly cacheService: CacheService,
     private readonly realtimeService: RealtimeService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly geminiService: GeminiService,
   ) {}
 
   async getGroupExpenses(
@@ -223,5 +225,35 @@ export class ExpensesService {
 
   async getCategories() {
     return this.expensesRepository.findCategories();
+  }
+
+  async analyzeReceipt(file: Express.Multer.File) {
+    if (!file) {
+      throw new Error('No receipt image provided');
+    }
+
+    const prompt = `
+      You are an expert OCR receipt parser. Extract the following information from the attached receipt image:
+      - amount: The total amount paid (number).
+      - date: The date of the receipt in YYYY-MM-DD format (string, if available).
+      - merchant: The name of the store or merchant. If the merchant name is missing, unreadable, or left blank, generate a concise descriptive title for this expense based on the items or context (e.g., "Hotel Services", "Restaurant Bill", "Taxi Ride", etc.) (string).
+      - category: A best-guess category for this expense (e.g., "Food", "Transport", "Accommodation", "Groceries", "Entertainment", "Other").
+
+      Return the result ONLY as a raw JSON object with the keys: amount, date, merchant, category. Do not include markdown code blocks.
+    `;
+
+    try {
+      const result = await this.geminiService.analyzeImageWithPrompt<{
+        amount: number;
+        date: string;
+        merchant: string;
+        category: string;
+      }>(file.buffer, file.mimetype, prompt);
+
+      return result;
+    } catch (error) {
+      this.logger.error('Failed to analyze receipt', error);
+      throw new Error('Failed to analyze receipt image');
+    }
   }
 }
