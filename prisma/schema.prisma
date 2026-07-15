@@ -108,6 +108,7 @@ model User {
   notifications        Notification[]
   itineraries          Itinerary[]           @relation("ItineraryCreatedBy")
   recommendations      Recommendation[]      @relation("RecommendationCreatedBy")
+  recommendationLikes  RecommendationLike[]
   aiConversations      AiConversation[]
   groupMessages        GroupMessage[]
 
@@ -245,7 +246,7 @@ model FundTransaction {
   createdBy String              @map("created_by") @db.Uuid
   expenseId String?             @map("expense_id") @db.Uuid
   type      FundTransactionType
-  amount    Decimal @db.Decimal(18, 2)
+  amount    Decimal             @db.Decimal(18, 2)
   note      String?
   createdAt DateTime            @default(now()) @map("created_at")
 
@@ -278,7 +279,7 @@ model Expense {
   createdBy     String           @map("created_by") @db.Uuid
   title         String
   description   String?
-  amount        Decimal @db.Decimal(18, 2)
+  amount        Decimal          @db.Decimal(18, 2)
   currency      Currency
   fundingSource FundingSource    @default(PERSONAL) @map("funding_source")
   splitType     ExpenseSplitType @map("split_type")
@@ -319,7 +320,7 @@ model ExpenseSplit {
   id        String    @id @default(uuid()) @db.Uuid
   expenseId String    @map("expense_id") @db.Uuid
   userId    String    @map("user_id") @db.Uuid
-  amount    Decimal @db.Decimal(18, 2)
+  amount    Decimal   @db.Decimal(18, 2)
   shares    Int?
   isPaid    Boolean   @default(false) @map("is_paid")
   paidAt    DateTime? @map("paid_at")
@@ -349,7 +350,7 @@ model Settlement {
   groupId    String           @map("group_id") @db.Uuid
   fromUserId String           @map("from_user_id") @db.Uuid
   toUserId   String           @map("to_user_id") @db.Uuid
-  amount     Decimal @db.Decimal(18, 2)
+  amount     Decimal          @db.Decimal(18, 2)
   currency   Currency
   status     SettlementStatus @default(PENDING)
   note       String?
@@ -412,7 +413,7 @@ model ItineraryItem {
   location      String?
   startTime     DateTime
   endTime       DateTime
-  estimatedCost Decimal? @db.Decimal(18, 2) @map("estimated_cost")
+  estimatedCost Decimal? @map("estimated_cost") @db.Decimal(18, 2)
   orderNo       Int      @map("order_no")
   notes         String?
   travelTime    Int?     @map("travel_time")
@@ -435,10 +436,26 @@ model Recommendation {
   expiresAt DateTime?          @map("expires_at")
   createdAt DateTime           @default(now()) @map("created_at")
 
-  group   Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  creator User  @relation("RecommendationCreatedBy", fields: [createdBy], references: [id])
+  group   Group                @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  creator User                 @relation("RecommendationCreatedBy", fields: [createdBy], references: [id])
+  likes   RecommendationLike[]
 
   @@map("recommendations")
+}
+
+model RecommendationLike {
+  id               String   @id @default(uuid()) @db.Uuid
+  recommendationId String   @map("recommendation_id") @db.Uuid
+  userId           String   @map("user_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  recommendation Recommendation @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([recommendationId, userId])
+  @@index([recommendationId])
+  @@index([userId])
+  @@map("recommendation_likes")
 }
 
 model AiConversation {

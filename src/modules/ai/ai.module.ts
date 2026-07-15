@@ -19,6 +19,6 @@ import { AiJobsProcessor } from './jobs/ai-jobs.processor';
     GeminiService,
     AiJobsProcessor,
   ],
-  exports: [ChatService, MemoryService, PlanningService],
+  exports: [ChatService, MemoryService, PlanningService, RecommendationAiService],
 })
-export class AiModule { }
+export class AiModule {}

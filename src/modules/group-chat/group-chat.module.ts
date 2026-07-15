@@ -10,6 +10,6 @@ import { GroupChatService } from './group-chat.service';
   imports: [PrismaModule, JwtModule.register({}), GroupsModule],
   controllers: [GroupChatController],
   providers: [GroupChatService, GroupChatGateway],
-  exports: [GroupChatService],
+  exports: [GroupChatService, GroupChatGateway],
 })
 export class GroupChatModule {}
