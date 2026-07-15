@@ -44,9 +44,9 @@ export class SettlementsService {
       this.settlementsRepository.findGroupSettlements(groupId),
     ]);
 
-    const numericBalances = balances.map((b: { userId: string; balance: number | string }) => ({
+    const numericBalances = balances.map((b: { userId: string; balance: number }) => ({
       userId: b.userId,
-      balance: typeof b.balance === 'number' ? b.balance : Number.parseFloat(b.balance.toString()),
+      balance: Number(b.balance),
     }));
 
     // 1. Simplify based on TRUE balances (excluding pending)

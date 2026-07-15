@@ -15,9 +15,9 @@ export class DebtSimplifier {
   private static logger = new Logger(DebtSimplifier.name);
 
   static simplify(balances: GroupBalance[]): OptimizedSettlement[] {
-    // Clone and separate into debtors and creditors
-    const debtors = balances.filter((b) => b.balance < -0.01).map((b) => ({ ...b }));
-    const creditors = balances.filter((b) => b.balance > 0.01).map((b) => ({ ...b }));
+    // Separate into debtors and creditors
+    const debtors = balances.filter((b) => b.balance < -0.01);
+    const creditors = balances.filter((b) => b.balance > 0.01);
 
     // Sort to optimize matching largest debts to largest credits
     debtors.sort((a, b) => a.balance - b.balance); // Ascending (most negative first)
