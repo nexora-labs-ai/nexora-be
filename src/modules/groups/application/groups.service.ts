@@ -278,12 +278,12 @@ export class GroupsService {
     const group = this.toDomain(data);
     group.assertMember(requestingUserId); // Owner or member can invite
 
-    const userToInvite = dto.email.includes('@')
-      ? await this.usersService.findByEmail(dto.email)
-      : await this.usersService.findByUsername(dto.email);
+    const userToInvite = dto.identifier.includes('@')
+      ? await this.usersService.findByEmail(dto.identifier)
+      : await this.usersService.findByUsername(dto.identifier);
 
     if (!userToInvite) {
-      throw new NotFoundError('User', dto.email);
+      throw new NotFoundError('User', dto.identifier);
     }
 
     if (group.members.some((m) => m.userId === userToInvite.id)) {
@@ -297,7 +297,7 @@ export class GroupsService {
 
     await this.groupsRepository.createInvitation({
       groupId,
-      email: dto.email,
+      email: userToInvite.email,
       invitedBy: requestingUserId,
       token,
     });

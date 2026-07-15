@@ -42,8 +42,8 @@ export class UsersService {
     return linked;
   }
 
-  async generateUniqueUsername(email: string): Promise<string> {
-    let baseUsername = (email.split('@')[0] || '').toLowerCase().replace(/[^a-z0-9_]/g, '');
+  async generateUniqueUsername(nameOrEmail: string): Promise<string> {
+    let baseUsername = (nameOrEmail.split('@')[0] || '').toLowerCase().replace(/[^a-z0-9_]/g, '');
     if (!baseUsername) {
       baseUsername = 'user';
     }
@@ -66,7 +66,7 @@ export class UsersService {
 
   async create(data: CreateUserData) {
     if (!data.username) {
-      data.username = await this.generateUniqueUsername(data.email);
+      data.username = await this.generateUniqueUsername(data.displayName || data.email);
     }
     return this.usersRepository.create(data);
   }

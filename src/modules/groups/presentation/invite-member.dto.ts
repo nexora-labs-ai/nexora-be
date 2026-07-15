@@ -40,5 +40,5 @@ export class InviteMemberDto {
   @ApiProperty({ description: 'Email or Username of the user to invite' })
   @IsNotEmpty()
   @IsEmailOrUsername()
-  email: string;
+  identifier: string;
 }
