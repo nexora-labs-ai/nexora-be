@@ -5,11 +5,15 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  ParseFilePipeBuilder,
   ParseUUIDPipe,
   Patch,
   Post,
   Query,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../shared/common/decorators/current-user.decorator';
 import { CreateSettlementDto } from './dto/create-settlement.dto';
@@ -28,6 +32,15 @@ export class SettlementsController {
     @CurrentUser('id') userId: string,
   ) {
     return this.settlementsService.getGroupSettlements(groupId, userId);
+  }
+
+  @Get('optimized')
+  @ApiOperation({ summary: 'Get optimized settlements (debt simplification)' })
+  getOptimizedSettlements(
+    @Query('groupId', ParseUUIDPipe) groupId: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.settlementsService.getOptimizedSettlements(groupId, userId);
   }
 
   @Post()
@@ -53,5 +66,22 @@ export class SettlementsController {
   @ApiOperation({ summary: 'Cancel a settlement' })
   cancel(@Param('id', ParseUUIDPipe) id: string, @CurrentUser('id') userId: string) {
     return this.settlementsService.cancelSettlement(id, userId);
+  }
+
+  @Post(':id/evidence')
+  @ApiOperation({ summary: 'Upload evidence for a settlement' })
+  @UseInterceptors(FileInterceptor('file'))
+  uploadEvidence(
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile(
+      new ParseFilePipeBuilder()
+        .addFileTypeValidator({ fileType: /(jpg|jpeg|png|webp)$/ })
+        .addMaxSizeValidator({ maxSize: 5 * 1024 * 1024 })
+        .build({ errorHttpStatusCode: HttpStatus.UNPROCESSABLE_ENTITY }),
+    )
+    file: Express.Multer.File,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.settlementsService.uploadEvidence(id, file, userId);
   }
 }
