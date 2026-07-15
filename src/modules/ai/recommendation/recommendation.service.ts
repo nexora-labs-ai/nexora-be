@@ -10,7 +10,7 @@ export class RecommendationAiService {
   constructor(
     private readonly geminiService: GeminiService,
     private readonly prisma: PrismaService,
-  ) {}
+  ) { }
 
   async generateExpenseRecommendations(groupId: string): Promise<void> {
     // Fetch context data
