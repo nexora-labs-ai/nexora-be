@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
   IsNotEmpty,
+  MaxLength,
   ValidationArguments,
   ValidationOptions,
   ValidatorConstraint,
@@ -16,11 +17,11 @@ export class IsEmailOrUsernameConstraint implements ValidatorConstraintInterface
     if (text.includes('@')) {
       return isEmail(text);
     }
-    return /^[a-z0-9_]+$/.test(text);
+    return /^[a-z0-9_]{3,30}$/.test(text);
   }
 
   defaultMessage(args: ValidationArguments) {
-    return '$property must be a valid email address or a valid username (lowercase letters, numbers, and underscores only)';
+    return '$property must be a valid email address or a valid username (3-30 chars, lowercase letters, numbers, and underscores only)';
   }
 }
 
@@ -40,5 +41,6 @@ export class InviteMemberDto {
   @ApiProperty({ description: 'Email or Username of the user to invite' })
   @IsNotEmpty()
   @IsEmailOrUsername()
+  @MaxLength(255)
   identifier: string;
 }

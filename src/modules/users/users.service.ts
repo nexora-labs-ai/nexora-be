@@ -44,6 +44,11 @@ export class UsersService {
 
   async generateUniqueUsername(nameOrEmail: string): Promise<string> {
     let baseUsername = (nameOrEmail.split('@')[0] || '').toLowerCase().replace(/[^a-z0-9_]/g, '');
+
+    if (baseUsername.length > 25) {
+      baseUsername = baseUsername.substring(0, 25);
+    }
+
     if (!baseUsername) {
       baseUsername = 'user';
     }
