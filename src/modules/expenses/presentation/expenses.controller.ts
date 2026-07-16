@@ -10,8 +10,11 @@ import {
   Post,
   Put,
   Query,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../../shared/common/decorators/current-user.decorator';
 import { ExpensesService } from '../application/expenses.service';
 import { CreateExpenseDto } from './create-expense.dto';
@@ -68,5 +71,24 @@ export class ExpensesController {
   @ApiOperation({ summary: 'Get group balance summary' })
   getBalance(@Param('groupId', ParseUUIDPipe) groupId: string, @CurrentUser('id') userId: string) {
     return this.expensesService.getGroupBalance(groupId, userId);
+  }
+
+  @Post('analyze-receipt')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiOperation({ summary: 'Analyze receipt image to extract data' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+    },
+  })
+  analyzeReceipt(@UploadedFile() file: Express.Multer.File) {
+    return this.expensesService.analyzeReceipt(file);
   }
 }
