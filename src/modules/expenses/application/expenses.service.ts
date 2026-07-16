@@ -237,7 +237,7 @@ export class ExpensesService {
       - amount: The total amount paid (number).
       - date: The date of the receipt in YYYY-MM-DD format (string, if available).
       - merchant: The name of the store or merchant. If the merchant name is missing, unreadable, or left blank, generate a concise descriptive title for this expense based on the items or context (e.g., "Hotel Services", "Restaurant Bill", "Taxi Ride", etc.) (string).
-      - category: A best-guess category for this expense (e.g., "Food", "Transport", "Accommodation", "Groceries", "Entertainment", "Other").
+      - category: A category for this expense. You MUST choose EXACTLY ONE from the following list: ["Food & Drinks", "Transport", "Accommodation", "Activities", "Shopping", "Entertainment", "Healthcare", "Utilities", "Other"]. Do NOT return any other category.
 
       Return the result ONLY as a raw JSON object with the keys: amount, date, merchant, category. Do not include markdown code blocks.
     `;
@@ -250,7 +250,15 @@ export class ExpensesService {
         category: string;
       }>(file.buffer, file.mimetype, prompt);
 
-      return result;
+      const categories = await this.getCategories();
+      const matchedCategory = categories.find(
+        (c) => c.name.toLowerCase() === result.category.toLowerCase(),
+      );
+
+      return {
+        ...result,
+        categoryId: matchedCategory?.id,
+      };
     } catch (error) {
       this.logger.error('Failed to analyze receipt', error);
       throw new Error('Failed to analyze receipt image');
