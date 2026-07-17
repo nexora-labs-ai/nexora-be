@@ -49,12 +49,6 @@ export class RecommendationsController {
     return this.recommendationsService.triggerRecommendationGeneration(groupId, type, userId);
   }
 
-  @Post('budget-analysis')
-  @ApiOperation({ summary: 'Trigger budget analysis' })
-  budgetAnalysis(@Param('groupId', ParseUUIDPipe) groupId: string) {
-    return this.recommendationsService.triggerBudgetAnalysis(groupId);
-  }
-
   @Delete('batch/:batchId')
   @ApiOperation({ summary: 'Delete recommendations by batch ID' })
   deleteByBatch(
