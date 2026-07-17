@@ -28,7 +28,8 @@ export class RecommendationsService {
         groupId,
         OR: [{ expiresAt: { gte: new Date() } }, { expiresAt: null }],
       },
-      orderBy: [{ score: 'desc' }, { createdAt: 'desc' }],
+      orderBy: { createdAt: 'desc' },
+      take: 100, // Limit to prevent memory/DB overload
       include: {
         likes: {
           where: { userId },
@@ -108,28 +109,15 @@ export class RecommendationsService {
   }
 
   async deleteByBatchId(groupId: string, batchId: string) {
-    // metadata is a JSON object, so we can't directly query by it easily in basic Prisma without raw query,
-    // BUT we can use raw query, or fetch and delete.
-    // Prisma supports JSON filtering in Postgres: `metadata: { path: ['batchId'], equals: batchId }`
-    const recs = await this.prisma.recommendation.findMany({
+    await this.prisma.recommendation.deleteMany({
       where: {
         groupId,
+        metadata: {
+          path: ['batchId'],
+          equals: batchId,
+        },
       },
-      select: { id: true, metadata: true },
     });
-
-    const idsToDelete = recs
-      .filter((r) => {
-        const meta = r.metadata as RecommendationMetadata;
-        return meta && meta.batchId === batchId;
-      })
-      .map((r) => r.id);
-
-    if (idsToDelete.length > 0) {
-      await this.prisma.recommendation.deleteMany({
-        where: { id: { in: idsToDelete } },
-      });
-    }
   }
 
   async likeRecommendation(id: string, userId: string) {
@@ -164,24 +152,21 @@ export class RecommendationsService {
   }
 
   async unlikeRecommendation(id: string, userId: string) {
-    let recommendation: { groupId: string } | null = null;
     try {
-      recommendation = await this.prisma.recommendation.findUnique({
-        where: { id },
-        select: { groupId: true },
-      });
-      await this.prisma.recommendationLike.delete({
+      // Optimized: Perform delete and select related groupId in a single database roundtrip
+      const deletedLike = await this.prisma.recommendationLike.delete({
         where: {
           recommendationId_userId: {
             recommendationId: id,
             userId,
           },
         },
+        include: { recommendation: { select: { groupId: true } } },
       });
 
-      if (recommendation) {
+      if (deletedLike?.recommendation) {
         this.groupChatGateway.server
-          .to(`chat:${recommendation.groupId}`)
+          .to(`chat:${deletedLike.recommendation.groupId}`)
           .emit('recommendation-liked', {
             recommendationId: id,
             userId,

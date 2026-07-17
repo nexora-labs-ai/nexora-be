@@ -1,9 +1,13 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
 
 export class GenerateRecommendationDto {
-  @ApiPropertyOptional({ description: 'Type of recommendation to generate', default: 'activity' })
-  @IsOptional()
+  @ApiProperty({
+    description: 'Nội dung tìm kiếm (VD: Quán ốc, Lẩu Thái)',
+    example: 'Quán ốc ngon rẻ',
+  })
+  @IsNotEmpty()
   @IsString()
-  type?: string;
+  @MaxLength(255)
+  type: string;
 }
