@@ -95,11 +95,11 @@ export class RecommendationsService {
     }
   }
 
-  async triggerBudgetAnalysis(groupId: string) {
-    // We leave this unimplemented or direct to ai service if needed, for now just log it
-    this.logger.log(`Budget analysis triggered for group ${groupId}`);
-    return { message: 'Budget analysis triggered' };
-  }
+  // async triggerBudgetAnalysis(groupId: string) {
+  //
+  //   this.logger.log(`Budget analysis triggered for group ${groupId}`);
+  //   return { message: 'Budget analysis triggered' };
+  // }
 
   async markActedOn(id: string) {
     return this.prisma.recommendation.delete({
