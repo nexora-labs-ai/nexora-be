@@ -9,6 +9,10 @@ import {
   isEmail,
   registerDecorator,
 } from 'class-validator';
+import {
+  USERNAME_INVALID_MESSAGE,
+  USERNAME_REGEX,
+} from '../../../shared/common/validators/validation.constants';
 
 @ValidatorConstraint({ name: 'isEmailOrUsername', async: false })
 export class IsEmailOrUsernameConstraint implements ValidatorConstraintInterface {
@@ -17,11 +21,11 @@ export class IsEmailOrUsernameConstraint implements ValidatorConstraintInterface
     if (text.includes('@')) {
       return isEmail(text);
     }
-    return /^[a-z0-9_]{3,30}$/.test(text);
+    return USERNAME_REGEX.test(text);
   }
 
   defaultMessage(args: ValidationArguments) {
-    return '$property must be a valid email address or a valid username (3-30 chars, lowercase letters, numbers, and underscores only)';
+    return USERNAME_INVALID_MESSAGE;
   }
 }
 

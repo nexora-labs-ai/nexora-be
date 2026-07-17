@@ -1,13 +1,9 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, IsPhoneNumber, IsString, IsUrl, Matches, MaxLength } from 'class-validator';
 import {
-  IsOptional,
-  IsPhoneNumber,
-  IsString,
-  IsUrl,
-  Matches,
-  MaxLength,
-  MinLength,
-} from 'class-validator';
+  USERNAME_INVALID_MESSAGE,
+  USERNAME_REGEX,
+} from '../../../shared/common/validators/validation.constants';
 
 export class UpdateUserDto {
   @ApiPropertyOptional({ example: 'John Doe' })
@@ -25,10 +21,8 @@ export class UpdateUserDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  @MinLength(3)
-  @MaxLength(30)
-  @Matches(/^[a-z0-9_]+$/, {
-    message: 'Username can only contain lowercase letters, numbers, and underscores',
+  @Matches(USERNAME_REGEX, {
+    message: USERNAME_INVALID_MESSAGE,
   })
   username?: string;
 

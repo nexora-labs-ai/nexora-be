@@ -46,6 +46,14 @@ export class UsersRepository {
     });
   }
 
+  async existsByUsername(username: string): Promise<boolean> {
+    const user = await this.prisma.user.findFirst({
+      where: { username, deletedAt: null },
+      select: { id: true },
+    });
+    return user !== null;
+  }
+
   async findByProvider(provider: AuthProvider, providerId: string) {
     return this.prisma.user.findFirst({
       where: {

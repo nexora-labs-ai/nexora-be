@@ -1,6 +1,8 @@
+import * as crypto from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { AuthProvider } from '@prisma/client';
 import { ConflictError, NotFoundError } from '../../shared/common/domain-errors';
+import { MAX_USERNAME_LENGTH } from '../../shared/common/validators/validation.constants';
 import { CacheService } from '../../shared/infrastructure/cache/cache.service';
 import { STORAGE_PORT, StoragePort } from '../../shared/infrastructure/ports/storage.port';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -45,8 +47,9 @@ export class UsersService {
   async generateUniqueUsername(nameOrEmail: string): Promise<string> {
     let baseUsername = (nameOrEmail.split('@')[0] || '').toLowerCase().replace(/[^a-z0-9_]/g, '');
 
-    if (baseUsername.length > 25) {
-      baseUsername = baseUsername.substring(0, 25);
+    const baseUsernameLimit = MAX_USERNAME_LENGTH - 5;
+    if (baseUsername.length > baseUsernameLimit) {
+      baseUsername = baseUsername.substring(0, baseUsernameLimit);
     }
 
     if (!baseUsername) {
@@ -54,18 +57,18 @@ export class UsersService {
     }
 
     let username = baseUsername;
-    let counter = 1;
     let isUnique = false;
 
     while (!isUnique) {
-      const existing = await this.usersRepository.findByUsername(username);
-      if (!existing) {
+      const exists = await this.usersRepository.existsByUsername(username);
+      if (!exists) {
         isUnique = true;
       } else {
-        username = `${baseUsername}${counter}`;
-        counter++;
+        const randomSuffix = crypto.randomBytes(3).toString('hex').substring(0, 5);
+        username = `${baseUsername}${randomSuffix}`;
       }
     }
+
     return username;
   }
 
@@ -81,8 +84,8 @@ export class UsersService {
     if (!user) throw new NotFoundError('User', id);
 
     if (dto.username && dto.username !== user.username) {
-      const existing = await this.usersRepository.findByUsername(dto.username);
-      if (existing) {
+      const exists = await this.usersRepository.existsByUsername(dto.username);
+      if (exists) {
         throw new ConflictError('Username is already taken');
       }
     }
