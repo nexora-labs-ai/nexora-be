@@ -1,9 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsNotEmpty } from 'class-validator';
+import { IsNotEmpty, MaxLength } from 'class-validator';
+import { IsEmailOrUsername } from '../../../shared/common/validators/is-email-or-username.validator';
 
 export class InviteMemberDto {
-  @ApiProperty({ description: 'Email of the user to invite' })
-  @IsEmail()
+  @ApiProperty({ description: 'Email or Username of the user to invite' })
   @IsNotEmpty()
-  email: string;
+  @IsEmailOrUsername()
+  @MaxLength(255)
+  identifier: string;
 }
