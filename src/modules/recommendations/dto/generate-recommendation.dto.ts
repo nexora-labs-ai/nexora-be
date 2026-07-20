@@ -9,5 +9,14 @@ export class GenerateRecommendationDto {
   @IsNotEmpty()
   @IsString()
   @MaxLength(255)
-  type: string;
+  userInput: string;
+
+  @ApiProperty({
+    description: 'Vị trí địa lý bắt buộc (VD: Quy Nhơn, Đà Lạt)',
+    example: 'Quy Nhơn',
+  })
+  @IsNotEmpty()
+  @IsString()
+  @MaxLength(100)
+  location: string;
 }

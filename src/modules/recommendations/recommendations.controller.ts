@@ -30,23 +30,34 @@ export class RecommendationsController {
   async findAll(
     @Param('groupId', ParseUUIDPipe) groupId: string,
     @CurrentUser('id') userId: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
-    const recommendations = await this.recommendationsService.getGroupRecommendations(
+    const pageNumber = page ? Number.parseInt(page, 10) : 1;
+    const limitNumber = limit ? Number.parseInt(limit, 10) : 50;
+
+    const result = await this.recommendationsService.getGroupRecommendations(
       groupId,
       userId,
+      pageNumber,
+      limitNumber,
     );
-    return { data: recommendations };
+    return { data: result.items, meta: result.meta };
   }
 
   @Post('generate')
   @ApiOperation({ summary: 'Trigger recommendation generation' })
   generate(
     @Param('groupId', ParseUUIDPipe) groupId: string,
-    @Query() query: GenerateRecommendationDto,
+    @Query() dto: GenerateRecommendationDto,
     @CurrentUser('id') userId: string,
   ) {
-    const type = query.type || 'activity';
-    return this.recommendationsService.triggerRecommendationGeneration(groupId, type, userId);
+    return this.recommendationsService.triggerRecommendationGeneration(
+      groupId,
+      dto.userInput,
+      dto.location,
+      userId,
+    );
   }
 
   @Delete('batch/:batchId')

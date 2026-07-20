@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
 import { RecommendationType } from '@prisma/client';
 import { PrismaService } from '../../../shared/database/prisma.service';
 import { GeminiService } from '../providers/gemini.service';
@@ -10,7 +10,7 @@ export class RecommendationAiService {
   constructor(
     private readonly geminiService: GeminiService,
     private readonly prisma: PrismaService,
-  ) { }
+  ) {}
 
   async generateExpenseRecommendations(groupId: string): Promise<void> {
     // Fetch context data
@@ -108,13 +108,19 @@ Return JSON with: { summary, trends, topCategories, savingOpportunities, project
 
   async generatePlacesRecommendations(
     groupId: string,
-    queryType: string,
+    userInput: string,
+    location: string,
     createdBy: string,
     batchId: string,
   ) {
     const prompt = `
-Generate 3-5 place recommendations for a group based on this request: "${queryType}".
-Provide the recommendations in a structured JSON array. Each object should have:
+Generate 3-5 place recommendations for a group based on this request: "${userInput}".
+The location is strictly: "${location}".
+CRITICAL: ALL recommendations MUST strictly be located in "${location}". Do not recommend places in other cities or areas.
+IMPORTANT: If the request ("${userInput}") or the location ("${location}") is pure gibberish, nonsensical, violates policies, or is impossible to fulfill, YOU MUST RETURN THIS EXACT JSON (do not return an array):
+{ "error": "Sorry, I can't find any suggestions for this request or location. Please enter it more clearly!" }
+
+Otherwise, provide the recommendations in a structured JSON array. Each object should have:
 - type: "RESTAURANT" or "CAFE" or "ACTIVITY" or "HOTEL"
 - title: Name of the place
 - content: Description of the place
@@ -128,7 +134,8 @@ Provide the recommendations in a structured JSON array. Each object should have:
 Return ONLY valid JSON.
 `;
 
-    let recommendations: Array<{
+    type AIErrorResponse = { error: string };
+    type AIRecommendationResponse = Array<{
       type: string;
       title: string;
       content: string;
@@ -139,13 +146,26 @@ Return ONLY valid JSON.
       imageUrl: string;
       googleMapsUrl: string;
     }>;
+    type AIResponse = AIErrorResponse | AIRecommendationResponse;
+
+    let rawResponse: AIResponse;
 
     try {
-      recommendations = await this.geminiService.generateJsonContent(prompt);
+      rawResponse = await this.geminiService.generateJsonContent<AIResponse>(prompt);
     } catch (e) {
       this.logger.error('Failed to parse AI places recommendations', e);
       throw new Error('AI returned invalid JSON');
     }
+
+    if (!Array.isArray(rawResponse) && 'error' in rawResponse) {
+      throw new BadRequestException(rawResponse.error);
+    }
+
+    if (!Array.isArray(rawResponse)) {
+      throw new BadRequestException('AI returned data that is not in array format.');
+    }
+
+    const recommendations = rawResponse;
 
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
@@ -156,9 +176,15 @@ Return ONLY valid JSON.
           data: {
             groupId,
             createdBy,
-            type:
-              RecommendationType[r.type.toUpperCase() as keyof typeof RecommendationType] ||
-              RecommendationType.ACTIVITY,
+            type: (() => {
+              const parsedType =
+                RecommendationType[r.type.toUpperCase() as keyof typeof RecommendationType];
+              if (!parsedType) {
+                this.logger.error(`Invalid recommendation type returned from AI: ${r.type}`);
+                throw new Error(`Invalid recommendation type: ${r.type}`);
+              }
+              return parsedType;
+            })(),
             title: r.title,
             content: {
               description: r.content,
@@ -169,7 +195,7 @@ Return ONLY valid JSON.
               imageUrl: r.imageUrl,
               googleMapsUrl: r.googleMapsUrl,
             },
-            metadata: { batchId, topic: queryType },
+            metadata: { batchId, topic: userInput, location },
             expiresAt,
           },
         }),

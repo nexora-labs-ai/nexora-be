@@ -22,37 +22,53 @@ export class RecommendationsService {
     private readonly groupChatService: GroupChatService,
   ) {}
 
-  async getGroupRecommendations(groupId: string, userId: string) {
-    const recommendations = await this.prisma.recommendation.findMany({
-      where: {
-        groupId,
-        OR: [{ expiresAt: { gte: new Date() } }, { expiresAt: null }],
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 100, // Limit to prevent memory/DB overload
-      include: {
-        likes: {
-          where: { userId },
-        },
-        _count: {
-          select: { likes: true },
-        },
-      },
-    });
+  async getGroupRecommendations(groupId: string, userId: string, page = 1, limit = 50) {
+    const skip = (page - 1) * limit;
 
-    const result = recommendations.map((rec) => ({
+    const [recommendations, total] = await Promise.all([
+      this.prisma.recommendation.findMany({
+        where: {
+          groupId,
+          OR: [{ expiresAt: { gte: new Date() } }, { expiresAt: null }],
+        },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip,
+        include: {
+          likes: {
+            where: { userId },
+          },
+          _count: {
+            select: { likes: true },
+          },
+        },
+      }),
+      this.prisma.recommendation.count({
+        where: {
+          groupId,
+          OR: [{ expiresAt: { gte: new Date() } }, { expiresAt: null }],
+        },
+      }),
+    ]);
+
+    const items = recommendations.map((rec) => ({
       ...rec,
       isLiked: rec.likes.length > 0,
       likeCount: rec._count.likes,
     }));
 
     this.logger.debug(
-      `getGroupRecommendations returning ${result.length} items for group ${groupId}`,
+      `getGroupRecommendations returning ${items.length} items for group ${groupId} (page ${page})`,
     );
-    return result;
+    return { items, meta: { total, page, limit } };
   }
 
-  async triggerRecommendationGeneration(groupId: string, type: string, userId: string) {
+  async triggerRecommendationGeneration(
+    groupId: string,
+    userInput: string,
+    location: string,
+    userId: string,
+  ) {
     const batchId = crypto.randomUUID();
 
     // Notify all clients in the group that generation has started
@@ -64,7 +80,8 @@ export class RecommendationsService {
       // We are generating synchronously now
       const created = await this.recommendationAiService.generatePlacesRecommendations(
         groupId,
-        type,
+        userInput,
+        location,
         userId,
         batchId,
       );
@@ -73,7 +90,7 @@ export class RecommendationsService {
       this.groupChatGateway.server.to(`chat:${groupId}`).emit('recommendations-generated', created);
 
       // Insert a system message so it appears in the chat bubble
-      const payload = JSON.stringify({ batchId, topic: type });
+      const payload = JSON.stringify({ batchId, topic: userInput, location });
       const message = await this.groupChatService.saveMessage(
         groupId,
         userId,
