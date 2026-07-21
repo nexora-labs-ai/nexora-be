@@ -1,16 +1,16 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
 import { RecommendationType } from '@prisma/client';
 import { PrismaService } from '../../../shared/database/prisma.service';
-import { AI_PORT, AiPort } from '../../../shared/infrastructure/ports/ai.port';
+import { GeminiService } from '../providers/gemini.service';
 
 @Injectable()
 export class RecommendationAiService {
   private readonly logger = new Logger(RecommendationAiService.name);
 
   constructor(
-    @Inject(AI_PORT) private readonly aiPort: AiPort,
+    private readonly geminiService: GeminiService,
     private readonly prisma: PrismaService,
-  ) { }
+  ) {}
 
   async generateExpenseRecommendations(groupId: string): Promise<void> {
     // Fetch context data
@@ -54,11 +54,9 @@ Provide recommendations in JSON format:
 
 Return only valid JSON.`;
 
-    const response = await this.aiPort.complete({ userPrompt: prompt, temperature: 0.5 });
-
     let recommendations: Array<{ type: string; title: string; content: string; priority: string }>;
     try {
-      recommendations = JSON.parse(response.content);
+      recommendations = await this.geminiService.generateJsonContent(prompt);
     } catch {
       this.logger.error('Failed to parse AI recommendations');
       return;
@@ -83,7 +81,6 @@ Return only valid JSON.`;
         title: r.title,
         content: { body: r.content, priority: r.priority },
         expiresAt,
-
       })),
     });
   }
@@ -102,12 +99,109 @@ ${JSON.stringify(expenses.map((e) => ({ amount: e.amount, category: e.category?.
 
 Return JSON with: { summary, trends, topCategories, savingOpportunities, projectedMonthlySpend }`;
 
-    const response = await this.aiPort.complete({ userPrompt: prompt, temperature: 0.3 });
+    try {
+      return await this.geminiService.generateJsonContent(prompt);
+    } catch {
+      return { error: 'Analysis failed' };
+    }
+  }
+
+  async generatePlacesRecommendations(
+    groupId: string,
+    userInput: string,
+    location: string,
+    createdBy: string,
+    batchId: string,
+  ) {
+    const prompt = `
+Generate 3-5 place recommendations for a group based on this request: "${userInput}".
+The location is strictly: "${location}".
+CRITICAL: ALL recommendations MUST strictly be located in "${location}". Do not recommend places in other cities or areas.
+IMPORTANT: If the request ("${userInput}") or the location ("${location}") is pure gibberish, nonsensical, violates policies, or is impossible to fulfill, YOU MUST RETURN THIS EXACT JSON (do not return an array):
+{ "error": "Sorry, I can't find any suggestions for this request or location. Please enter it more clearly!" }
+
+Otherwise, provide the recommendations in a structured JSON array. Each object should have:
+- type: "RESTAURANT" or "CAFE" or "ACTIVITY" or "HOTEL"
+- title: Name of the place
+- content: Description of the place
+- address: A realistic address (fake or real but believable)
+- priceRange: Estimated price (e.g. 100k - 200k VND)
+- rating: Random rating between 3.5 and 5.0
+- aiReason: A detailed explanation of why this place matches the request.
+- imageUrl: Provide a generic placeholder image URL related to the place type (e.g., from Unsplash source or a mock URL).
+- googleMapsUrl: A valid Google Maps search URL for this place (e.g., "https://www.google.com/maps/search/?api=1&query=Place+Name")
+
+Return ONLY valid JSON.
+`;
+
+    type AIErrorResponse = { error: string };
+    type AIRecommendationResponse = Array<{
+      type: string;
+      title: string;
+      content: string;
+      address: string;
+      priceRange: string;
+      rating: number;
+      aiReason: string;
+      imageUrl: string;
+      googleMapsUrl: string;
+    }>;
+    type AIResponse = AIErrorResponse | AIRecommendationResponse;
+
+    let rawResponse: AIResponse;
 
     try {
-      return JSON.parse(response.content);
-    } catch {
-      return { error: 'Analysis failed', raw: response.content };
+      rawResponse = await this.geminiService.generateJsonContent<AIResponse>(prompt);
+    } catch (e) {
+      this.logger.error('Failed to parse AI places recommendations', e);
+      throw new Error('AI returned invalid JSON');
     }
+
+    if (!Array.isArray(rawResponse) && 'error' in rawResponse) {
+      throw new BadRequestException(rawResponse.error);
+    }
+
+    if (!Array.isArray(rawResponse)) {
+      throw new BadRequestException('AI returned data that is not in array format.');
+    }
+
+    const recommendations = rawResponse;
+
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+
+    const created = await Promise.all(
+      recommendations.map((r) =>
+        this.prisma.recommendation.create({
+          data: {
+            groupId,
+            createdBy,
+            type: (() => {
+              const parsedType =
+                RecommendationType[r.type.toUpperCase() as keyof typeof RecommendationType];
+              if (!parsedType) {
+                this.logger.error(`Invalid recommendation type returned from AI: ${r.type}`);
+                throw new Error(`Invalid recommendation type: ${r.type}`);
+              }
+              return parsedType;
+            })(),
+            title: r.title,
+            content: {
+              description: r.content,
+              address: r.address,
+              priceRange: r.priceRange,
+              rating: r.rating,
+              aiReason: r.aiReason,
+              imageUrl: r.imageUrl,
+              googleMapsUrl: r.googleMapsUrl,
+            },
+            metadata: { batchId, topic: userInput, location },
+            expiresAt,
+          },
+        }),
+      ),
+    );
+
+    return created;
   }
 }
