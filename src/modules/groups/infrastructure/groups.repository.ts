@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Currency, GroupRole } from '@prisma/client';
+import { Currency, GroupRole, Prisma } from '@prisma/client';
 import { BusinessRuleError, NotFoundError } from '../../../shared/common/domain-errors';
 import {
   PaginatedResult,
@@ -23,6 +23,18 @@ export class GroupsRepository {
         fund: true,
       },
     });
+  }
+
+  async getTotalSpent(groupId: string): Promise<number> {
+    const expensesAgg = await this.prisma.expense.aggregate({
+      where: {
+        groupId,
+        deletedAt: null,
+        fundingSource: 'GROUP_FUND',
+      },
+      _sum: { amount: true },
+    });
+    return expensesAgg._sum.amount ? Number(expensesAgg._sum.amount) : 0;
   }
 
   async findByIdWithMembers(id: string) {
@@ -59,6 +71,9 @@ export class GroupsRepository {
     name: string;
     description?: string;
     currency: string;
+    startDate?: string;
+    endDate?: string;
+    budgetGoal?: number;
     createdByUserId: string;
   }) {
     return this.prisma.group.create({
@@ -66,6 +81,9 @@ export class GroupsRepository {
         name: data.name,
         description: data.description,
         currency: data.currency as Currency,
+        startDate: data.startDate ? new Date(data.startDate) : null,
+        endDate: data.endDate ? new Date(data.endDate) : null,
+        budgetGoal: data.budgetGoal,
         members: {
           create: {
             userId: data.createdByUserId,
@@ -84,9 +102,23 @@ export class GroupsRepository {
 
   async update(
     id: string,
-    data: Partial<{ name: string; description: string; avatarUrl: string; currency: Currency }>,
+    data: Partial<{
+      name: string;
+      description: string;
+      avatarUrl: string;
+      currency: Currency;
+      startDate: string;
+      endDate: string;
+      budgetGoal: number;
+    }>,
   ) {
-    return this.prisma.group.update({ where: { id }, data });
+    const prismaData: Prisma.GroupUpdateInput = {
+      ...data,
+      startDate: data.startDate ? new Date(data.startDate) : undefined,
+      endDate: data.endDate ? new Date(data.endDate) : undefined,
+    };
+
+    return this.prisma.group.update({ where: { id }, data: prismaData });
   }
 
   async softDelete(id: string) {

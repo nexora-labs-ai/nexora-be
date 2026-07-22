@@ -49,13 +49,17 @@ export class GroupsService {
   ) {}
 
   async getGroup(groupId: string, requestingUserId: string) {
-    const data = await this.groupsRepository.findById(groupId);
+    const [data, totalSpent] = await Promise.all([
+      this.groupsRepository.findById(groupId),
+      this.groupsRepository.getTotalSpent(groupId),
+    ]);
+
     if (!data) throw new NotFoundError('Group', groupId);
 
     const group = this.toDomain(data);
     group.assertMember(requestingUserId);
 
-    return data;
+    return { ...data, totalSpent };
   }
 
   async getUserGroups(userId: string, page: number, limit: number) {
@@ -67,6 +71,9 @@ export class GroupsService {
       name: dto.name,
       description: dto.description,
       currency: dto.currency ?? 'USD',
+      startDate: dto.startDate,
+      endDate: dto.endDate,
+      budgetGoal: dto.budgetGoal,
       createdByUserId: createdBy,
     });
 
@@ -98,6 +105,9 @@ export class GroupsService {
     const updated = await this.groupsRepository.update(groupId, {
       name: dto.name,
       description: dto.description,
+      startDate: dto.startDate,
+      endDate: dto.endDate,
+      budgetGoal: dto.budgetGoal,
       currency: dto.currency,
     });
     await this.cacheService.del(CacheService.keys.group(groupId));
