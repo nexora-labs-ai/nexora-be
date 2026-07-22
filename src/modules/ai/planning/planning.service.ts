@@ -72,6 +72,8 @@ export class PlanningService {
   async generateItinerary(params: {
     groupId: string;
     destination: string;
+    startDate: Date;
+    endDate: Date;
     duration: number;
     budget?: number;
     interests?: string[];
@@ -79,7 +81,7 @@ export class PlanningService {
   }) {
     const prompt = `
 You are an expert local tour guide and master travel planner.
-Generate a realistic, well-paced ${params.duration}-day travel itinerary for ${params.destination}.
+Generate a realistic, well-paced travel itinerary for ${params.destination} from ${params.startDate.toDateString()} to ${params.endDate.toDateString()} (${params.duration} days).
 
 Group preferences:
 - Duration: ${params.duration} days
@@ -128,14 +130,14 @@ Return exactly a JSON object (no markdown formatting) with the following structu
         title: plan.title,
         description: plan.description,
         destination: params.destination,
-        startDate: new Date(),
-        endDate: new Date(Date.now() + params.duration * 24 * 60 * 60 * 1000),
+        startDate: params.startDate,
+        endDate: params.endDate,
         status: ItineraryStatus.DRAFT,
         createdBy: params.requestedBy,
         items: {
           createMany: {
             data: plan.items.map((item: AiItineraryItem) => {
-              const startDate = new Date(); // Using today as base
+              const startDate = new Date(params.startDate); // Using group startDate as base
               const targetDate = new Date(startDate);
               targetDate.setDate(startDate.getDate() + ((item.day || 1) - 1));
               const dateStr = targetDate.toISOString().split('T')[0];

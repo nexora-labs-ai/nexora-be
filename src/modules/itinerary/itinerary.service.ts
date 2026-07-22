@@ -57,14 +57,32 @@ export class ItineraryService {
     groupId: string,
     params: {
       destination: string;
-      duration: number;
       budget?: number;
       interests?: string[];
       requestedBy: string;
     },
   ) {
+    const group = await this.prisma.group.findUnique({
+      where: { id: groupId },
+      select: { startDate: true, endDate: true },
+    });
+
+    if (!group) throw new NotFoundError('Group', groupId);
+
+    const start = group.startDate ? new Date(group.startDate) : new Date();
+    const end = group.endDate
+      ? new Date(group.endDate)
+      : new Date(start.getTime() + 3 * 24 * 3600 * 1000); // 3 days fallback
+
+    // Ensure duration is at least 1 day
+    let duration = Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) + 1;
+    if (duration < 1) duration = 1;
+
     return this.planningService.generateItinerary({
       groupId,
+      startDate: start,
+      endDate: end,
+      duration,
       ...params,
     });
   }

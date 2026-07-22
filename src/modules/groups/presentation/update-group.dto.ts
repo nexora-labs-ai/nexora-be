@@ -1,6 +1,14 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Currency } from '@prisma/client';
-import { IsEnum, IsOptional, IsString, IsUrl, MaxLength } from 'class-validator';
+import {
+  IsDateString,
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 export class UpdateGroupDto {
   @ApiPropertyOptional()
@@ -19,4 +27,20 @@ export class UpdateGroupDto {
   @IsOptional()
   @IsEnum(Currency)
   currency?: Currency;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  startDate?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  budgetGoal?: number;
 }
