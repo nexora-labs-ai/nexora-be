@@ -18,7 +18,22 @@ export class GroupsRepository {
       include: {
         members: {
           where: { leftAt: null, user: { deletedAt: null } },
-          include: { user: { include: { profile: true } } },
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                status: true,
+                profile: {
+                  select: {
+                    userId: true,
+                    displayName: true,
+                    avatarUrl: true,
+                  },
+                },
+              },
+            },
+          },
         },
         fund: true,
       },
