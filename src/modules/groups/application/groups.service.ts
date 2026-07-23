@@ -48,16 +48,22 @@ export class GroupsService {
     @Inject(STORAGE_PORT) private readonly storage: StoragePort,
   ) {}
 
-  async getGroupSummary(groupId: string, requestingUserId: string) {
-    const [data, totalSpent] = await Promise.all([
-      this.groupsRepository.findById(groupId),
-      this.groupsRepository.getTotalSpent(groupId),
-    ]);
+  async getGroup(groupId: string, requestingUserId: string) {
+    const data = await this.groupsRepository.findById(groupId);
 
     if (!data) throw new NotFoundError('Group', groupId);
 
     const group = this.toDomain(data);
     group.assertMember(requestingUserId);
+
+    return data;
+  }
+
+  async getGroupSummary(groupId: string, requestingUserId: string) {
+    const [data, totalSpent] = await Promise.all([
+      this.getGroup(groupId, requestingUserId),
+      this.groupsRepository.getTotalSpent(groupId),
+    ]);
 
     return { ...data, totalSpent };
   }
