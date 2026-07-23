@@ -48,7 +48,7 @@ export class GroupsService {
     @Inject(STORAGE_PORT) private readonly storage: StoragePort,
   ) {}
 
-  async getGroup(groupId: string, requestingUserId: string) {
+  async getGroupSummary(groupId: string, requestingUserId: string) {
     const [data, totalSpent] = await Promise.all([
       this.groupsRepository.findById(groupId),
       this.groupsRepository.getTotalSpent(groupId),
