@@ -54,7 +54,7 @@ export class GroupsController {
   @Get(':id')
   @ApiOperation({ summary: 'Get group by ID' })
   findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser('id') userId: string) {
-    return this.groupsService.getGroup(id, userId);
+    return this.groupsService.getGroupSummary(id, userId);
   }
 
   @Patch(':id')
