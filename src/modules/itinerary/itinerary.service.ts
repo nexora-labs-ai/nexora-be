@@ -109,6 +109,10 @@ export class ItineraryService {
       orderNo = lastItem ? lastItem.orderNo + 1 : 1;
     }
 
+    if (new Date(dto.endTime).getTime() <= new Date(dto.startTime).getTime()) {
+      throw new BusinessRuleError('endTime must be after startTime');
+    }
+
     let estimatedCost = null;
     if (dto.estimatedCost !== undefined && dto.estimatedCost !== null) {
       estimatedCost = new Prisma.Decimal(dto.estimatedCost).toDecimalPlaces(
@@ -128,6 +132,7 @@ export class ItineraryService {
         estimatedCost,
         orderNo,
         notes: dto.notes,
+        recommendationId: dto.recommendationId,
       },
     });
   }

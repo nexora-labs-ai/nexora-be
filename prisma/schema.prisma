@@ -421,8 +421,10 @@ model ItineraryItem {
   orderNo       Int      @map("order_no")
   notes         String?
   travelTime    Int?     @map("travel_time")
+  recommendationId String? @map("recommendation_id") @db.Uuid
 
   itinerary Itinerary @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
+  recommendation Recommendation? @relation(fields: [recommendationId], references: [id])
 
   @@index([itineraryId, orderNo])
   @@map("itinerary_items")
@@ -443,6 +445,7 @@ model Recommendation {
   group   Group                @relation(fields: [groupId], references: [id], onDelete: Cascade)
   creator User                 @relation("RecommendationCreatedBy", fields: [createdBy], references: [id])
   likes   RecommendationLike[]
+  itineraryItems ItineraryItem[]
 
   @@map("recommendations")
 }
