@@ -8,7 +8,10 @@ import {
   IsString,
   MaxLength,
   Min,
+  MinLength,
 } from 'class-validator';
+import { IsAfter } from '../../../shared/common/validators/is-after.validator';
+import { IsBefore } from '../../../shared/common/validators/is-before.validator';
 
 export class UpdateGroupDto {
   @ApiPropertyOptional()
@@ -31,11 +34,13 @@ export class UpdateGroupDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsDateString()
+  @IsBefore('endDate')
   startDate?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsDateString()
+  @IsAfter('startDate')
   endDate?: string;
 
   @ApiPropertyOptional()
