@@ -64,7 +64,7 @@ export class ItineraryService {
   ) {
     const group = await this.prisma.group.findUnique({
       where: { id: groupId },
-      select: { startDate: true, endDate: true },
+      select: { startDate: true, endDate: true, budgetGoal: true },
     });
 
     if (!group) throw new NotFoundError('Group', groupId);
@@ -78,12 +78,18 @@ export class ItineraryService {
     let duration = Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) + 1;
     if (duration < 1) duration = 1;
 
+    let finalBudget = params.budget;
+    if (finalBudget === undefined || finalBudget === null) {
+      finalBudget = group.budgetGoal ? Number(group.budgetGoal) : undefined;
+    }
+
     return this.planningService.generateItinerary({
       groupId,
       startDate: start,
       endDate: end,
       duration,
       ...params,
+      budget: finalBudget,
     });
   }
 
