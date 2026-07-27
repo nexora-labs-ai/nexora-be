@@ -78,7 +78,7 @@ export class RecommendationsService {
 
     try {
       // We are generating synchronously now
-      const created = await this.recommendationAiService.generatePlacesRecommendations(
+      const result = await this.recommendationAiService.generatePlacesRecommendations(
         groupId,
         userInput,
         location,
@@ -87,10 +87,17 @@ export class RecommendationsService {
       );
 
       // Broadcast real-time event for UI update
-      this.groupChatGateway.server.to(`chat:${groupId}`).emit('recommendations-generated', created);
+      this.groupChatGateway.server
+        .to(`chat:${groupId}`)
+        .emit('recommendations-generated', result.recommendations);
 
       // Insert a system message so it appears in the chat bubble
-      const payload = JSON.stringify({ batchId, topic: userInput, location });
+      const payload = JSON.stringify({
+        batchId,
+        topic: userInput,
+        location,
+        introMessage: result.introMessage,
+      });
       const message = await this.groupChatService.saveMessage(
         groupId,
         userId,
@@ -98,7 +105,10 @@ export class RecommendationsService {
       );
       this.groupChatGateway.server.to(`chat:${groupId}`).emit('new-message', message);
 
-      return { message: 'Recommendation generation completed', count: created.length };
+      return {
+        message: 'Recommendation generation completed',
+        count: result.recommendations.length,
+      };
     } catch (e) {
       this.logger.error(
         'Failed to create recommendation system message or generate recommendations',

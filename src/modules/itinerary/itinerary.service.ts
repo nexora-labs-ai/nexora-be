@@ -64,7 +64,7 @@ export class ItineraryService {
   ) {
     const group = await this.prisma.group.findUnique({
       where: { id: groupId },
-      select: { startDate: true, endDate: true, budgetGoal: true },
+      select: { startDate: true, endDate: true, budgetGoal: true, currency: true },
     });
 
     if (!group) throw new NotFoundError('Group', groupId);
@@ -90,6 +90,7 @@ export class ItineraryService {
       duration,
       ...params,
       budget: finalBudget,
+      currency: group.currency,
     });
   }
 
@@ -258,7 +259,10 @@ export class ItineraryService {
 
     const itinerary = await this.prisma.itinerary.findUnique({
       where: { id: itineraryId },
-      include: { items: { orderBy: { orderNo: 'asc' } } },
+      include: {
+        items: { orderBy: { orderNo: 'asc' } },
+        group: { select: { currency: true } },
+      },
     });
     if (!itinerary) throw new NotFoundError('Itinerary', itineraryId);
 
@@ -300,7 +304,10 @@ export class ItineraryService {
 
     const itinerary = await this.prisma.itinerary.findUnique({
       where: { id: itineraryId },
-      include: { items: { orderBy: { orderNo: 'asc' } } },
+      include: {
+        items: { orderBy: { orderNo: 'asc' } },
+        group: { select: { currency: true } },
+      },
     });
     if (!itinerary) throw new NotFoundError('Itinerary', itineraryId);
 
