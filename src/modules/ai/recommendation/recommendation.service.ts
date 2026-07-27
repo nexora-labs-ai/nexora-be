@@ -120,7 +120,11 @@ CRITICAL: ALL recommendations MUST strictly be located in "${location}". Do not 
 IMPORTANT: If the request ("${userInput}") or the location ("${location}") is pure gibberish, nonsensical, violates policies, or is impossible to fulfill, YOU MUST RETURN THIS EXACT JSON (do not return an array):
 { "error": "Sorry, I can't find any suggestions for this request or location. Please enter it more clearly!" }
 
-Otherwise, provide the recommendations in a structured JSON array. Each object should have:
+Otherwise, provide a friendly intro message and the recommendations in a structured JSON object. The object MUST have the following structure:
+{
+  "introMessage": "A friendly, conversational introductory message based on the user's request (e.g., 'Here are some great spots I found for your trip to Hanoi!')",
+  "recommendations": [
+    // Array of objects with the following fields:
 - type: "RESTAURANT" or "CAFE" or "ACTIVITY" or "HOTEL"
 - title: Name of the place
 - content: Description of the place
@@ -130,22 +134,27 @@ Otherwise, provide the recommendations in a structured JSON array. Each object s
 - aiReason: A detailed explanation of why this place matches the request.
 - imageUrl: Provide a generic placeholder image URL related to the place type (e.g., from Unsplash source or a mock URL).
 - googleMapsUrl: A valid Google Maps search URL for this place (e.g., "https://www.google.com/maps/search/?api=1&query=Place+Name")
+  ]
+}
 
 Return ONLY valid JSON.
 `;
 
     type AIErrorResponse = { error: string };
-    type AIRecommendationResponse = Array<{
-      type: string;
-      title: string;
-      content: string;
-      address: string;
-      priceRange: string;
-      rating: number;
-      aiReason: string;
-      imageUrl: string;
-      googleMapsUrl: string;
-    }>;
+    type AIRecommendationResponse = {
+      introMessage: string;
+      recommendations: Array<{
+        type: string;
+        title: string;
+        content: string;
+        address: string;
+        priceRange: string;
+        rating: number;
+        aiReason: string;
+        imageUrl: string;
+        googleMapsUrl: string;
+      }>;
+    };
     type AIResponse = AIErrorResponse | AIRecommendationResponse;
 
     let rawResponse: AIResponse;
@@ -161,11 +170,11 @@ Return ONLY valid JSON.
       throw new BadRequestException(rawResponse.error);
     }
 
-    if (!Array.isArray(rawResponse)) {
-      throw new BadRequestException('AI returned data that is not in array format.');
+    if (!('recommendations' in rawResponse) || !Array.isArray(rawResponse.recommendations)) {
+      throw new BadRequestException('AI returned data that is not in the expected format.');
     }
 
-    const recommendations = rawResponse;
+    const { introMessage, recommendations } = rawResponse;
 
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
@@ -202,6 +211,6 @@ Return ONLY valid JSON.
       ),
     );
 
-    return created;
+    return { introMessage, recommendations: created };
   }
 }

@@ -55,7 +55,16 @@ export class GroupsRepository {
   async findByIdWithMembers(id: string) {
     return this.prisma.group.findUnique({
       where: { id, deletedAt: null },
-      include: { members: { where: { leftAt: null, user: { deletedAt: null } } }, fund: true },
+      select: {
+        id: true,
+        name: true,
+        avatarUrl: true,
+        currency: true,
+        members: {
+          where: { leftAt: null, user: { deletedAt: null } },
+          select: { userId: true, role: true },
+        },
+      },
     });
   }
 

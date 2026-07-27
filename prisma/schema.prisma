@@ -422,6 +422,8 @@ model ItineraryItem {
   notes         String?
   travelTime    Int?     @map("travel_time")
   recommendationId String? @map("recommendation_id") @db.Uuid
+  imageUrl      String?  @map("image_url")
+  googleMapsUrl String?  @map("google_maps_url")
 
   itinerary Itinerary @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
   recommendation Recommendation? @relation(fields: [recommendationId], references: [id])
