@@ -28,7 +28,7 @@ import { InviteMemberDto } from '../presentation/invite-member.dto';
 import { UpdateGroupDto } from '../presentation/update-group.dto';
 import { WithdrawFundDto } from '../presentation/withdraw-fund.dto';
 
-export type GroupPayload = {
+export type GroupAuthContext = {
   id: string;
   name: string | null;
   avatarUrl?: string | null;
@@ -60,10 +60,8 @@ export class GroupsService {
   }
 
   async getGroupSummary(groupId: string, requestingUserId: string) {
-    const [data, totalSpent] = await Promise.all([
-      this.getGroup(groupId, requestingUserId),
-      this.groupsRepository.getTotalSpent(groupId),
-    ]);
+    const data = await this.getGroup(groupId, requestingUserId);
+    const totalSpent = await this.groupsRepository.getTotalSpent(groupId);
 
     return { ...data, totalSpent };
   }
@@ -105,6 +103,19 @@ export class GroupsService {
         throw new BusinessRuleError(
           'Cannot change group currency after financial transactions have been made',
         );
+      }
+    }
+
+    const nextStartDateStr =
+      dto.startDate !== undefined ? dto.startDate : data.startDate?.toISOString();
+    const nextEndDateStr = dto.endDate !== undefined ? dto.endDate : data.endDate?.toISOString();
+
+    // Convert to Date objects to check if both exist and compare
+    if (nextStartDateStr && nextEndDateStr) {
+      const nextStartDate = new Date(nextStartDateStr);
+      const nextEndDate = new Date(nextEndDateStr);
+      if (nextStartDate >= nextEndDate) {
+        throw new BusinessRuleError('startDate must be before endDate');
       }
     }
 
@@ -378,7 +389,7 @@ export class GroupsService {
     );
   }
 
-  private toDomain(data: GroupPayload): Group {
+  private toDomain(data: GroupAuthContext): Group {
     return new Group(
       data.id,
       data.name ?? '',

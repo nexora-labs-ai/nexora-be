@@ -25,6 +25,7 @@ import { AddMemberDto } from './add-member.dto';
 import { ContributeFundDto } from './contribute-fund.dto';
 import { CreateGroupDto } from './create-group.dto';
 import { FundActionResponseDto } from './fund-response.dto';
+import { GroupSummaryResponseDto } from './group-summary-response.dto';
 import { RequireGroupRole } from './guards/group-role.decorator';
 import { GroupRoleGuard } from './guards/group-role.guard';
 import { InviteMemberDto } from './invite-member.dto';
@@ -53,6 +54,7 @@ export class GroupsController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get group by ID' })
+  @ApiResponse({ status: 200, type: GroupSummaryResponseDto })
   findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser('id') userId: string) {
     return this.groupsService.getGroupSummary(id, userId);
   }
