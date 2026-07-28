@@ -74,13 +74,17 @@ export class ItineraryService {
       ? new Date(group.endDate)
       : new Date(start.getTime() + 3 * 24 * 3600 * 1000); // 3 days fallback
 
-    // Ensure duration is at least 1 day
-    let duration = Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) + 1;
-    if (duration < 1) duration = 1;
+    if (start.getTime() >= end.getTime()) {
+      throw new BusinessRuleError(
+        'Group date range is invalid (startDate >= endDate). Please update the group dates before generating an itinerary.',
+      );
+    }
+
+    const duration = Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) + 1;
 
     let finalBudget = params.budget;
     if (finalBudget === undefined || finalBudget === null) {
-      finalBudget = group.budgetGoal ? Number(group.budgetGoal) : undefined;
+      finalBudget = group.budgetGoal == null ? undefined : Number(group.budgetGoal);
     }
 
     return this.planningService.generateItinerary({
@@ -104,7 +108,16 @@ export class ItineraryService {
   }
 
   async createItineraryItem(itineraryId: string, dto: CreateItineraryItemDto, userId: string) {
-    await this.assertItineraryAccess(itineraryId, userId);
+    const itinerary = await this.assertItineraryAccess(itineraryId, userId);
+
+    if (dto.recommendationId) {
+      const rec = await this.prisma.recommendation.findFirst({
+        where: { id: dto.recommendationId, groupId: itinerary.groupId },
+      });
+      if (!rec) {
+        throw new BusinessRuleError('Invalid recommendation ID for this group');
+      }
+    }
 
     // Determine orderNo
     let orderNo = dto.orderNo;
@@ -139,7 +152,10 @@ export class ItineraryService {
         estimatedCost,
         orderNo,
         notes: dto.notes,
+        travelTime: dto.travelTime,
         recommendationId: dto.recommendationId,
+        imageUrl: dto.imageUrl,
+        googleMapsUrl: dto.googleMapsUrl,
       },
     });
   }
@@ -191,7 +207,16 @@ export class ItineraryService {
     dto: UpdateItineraryItemDto,
     userId: string,
   ) {
-    await this.assertItineraryAccess(itineraryId, userId);
+    const itinerary = await this.assertItineraryAccess(itineraryId, userId);
+
+    if (dto.recommendationId) {
+      const rec = await this.prisma.recommendation.findFirst({
+        where: { id: dto.recommendationId, groupId: itinerary.groupId },
+      });
+      if (!rec) {
+        throw new BusinessRuleError('Invalid recommendation ID for this group');
+      }
+    }
 
     const item = await this.prisma.itineraryItem.findUnique({ where: { id: itemId } });
     if (!item || item.itineraryId !== itineraryId) {
@@ -227,6 +252,9 @@ export class ItineraryService {
           orderNo: dto.orderNo,
           notes: dto.notes,
           travelTime: dto.travelTime,
+          recommendationId: dto.recommendationId,
+          imageUrl: dto.imageUrl,
+          googleMapsUrl: dto.googleMapsUrl,
         },
       });
 
@@ -290,6 +318,9 @@ export class ItineraryService {
             startTime: new Date(`${dateStr}T${aiItem.startTime || '09:00'}:00Z`),
             endTime: new Date(`${dateStr}T${aiItem.endTime || '11:00'}:00Z`),
             estimatedCost: aiItem.estimatedCost,
+            travelTime: aiItem.travelTime,
+            imageUrl: aiItem.imageUrl,
+            googleMapsUrl: aiItem.googleMapsUrl,
             orderNo: (aiItem.order || 1) + ((aiItem.day || 1) - 1) * 100,
           };
         }),
@@ -331,6 +362,9 @@ export class ItineraryService {
             startTime: new Date(`${dateStr}T${item.startTime || '09:00'}:00Z`),
             endTime: new Date(`${dateStr}T${item.endTime || '11:00'}:00Z`),
             estimatedCost: item.estimatedCost,
+            travelTime: item.travelTime,
+            imageUrl: item.imageUrl,
+            googleMapsUrl: item.googleMapsUrl,
             orderNo: (item.order || 1) + ((item.day || 1) - 1) * 100,
           };
         }),

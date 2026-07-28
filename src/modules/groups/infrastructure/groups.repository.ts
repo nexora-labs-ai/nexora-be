@@ -40,7 +40,7 @@ export class GroupsRepository {
     });
   }
 
-  async getTotalSpent(groupId: string): Promise<number> {
+  async getTotalSpent(groupId: string): Promise<string> {
     const expensesAgg = await this.prisma.expense.aggregate({
       where: {
         groupId,
@@ -49,7 +49,7 @@ export class GroupsRepository {
       },
       _sum: { amount: true },
     });
-    return expensesAgg._sum.amount ? Number(expensesAgg._sum.amount) : 0;
+    return expensesAgg._sum.amount ? expensesAgg._sum.amount.toString() : '0';
   }
 
   async findByIdWithMembers(id: string) {
@@ -60,6 +60,8 @@ export class GroupsRepository {
         name: true,
         avatarUrl: true,
         currency: true,
+        startDate: true,
+        endDate: true,
         members: {
           where: { leftAt: null, user: { deletedAt: null } },
           select: { userId: true, role: true },
@@ -131,15 +133,16 @@ export class GroupsRepository {
       description: string;
       avatarUrl: string;
       currency: Currency;
-      startDate: string;
-      endDate: string;
-      budgetGoal: number;
+      startDate: string | null;
+      endDate: string | null;
+      budgetGoal: number | null;
     }>,
   ) {
     const prismaData: Prisma.GroupUpdateInput = {
       ...data,
-      startDate: data.startDate ? new Date(data.startDate) : undefined,
-      endDate: data.endDate ? new Date(data.endDate) : undefined,
+      startDate:
+        data.startDate === null ? null : data.startDate ? new Date(data.startDate) : undefined,
+      endDate: data.endDate === null ? null : data.endDate ? new Date(data.endDate) : undefined,
     };
 
     return this.prisma.group.update({ where: { id }, data: prismaData });

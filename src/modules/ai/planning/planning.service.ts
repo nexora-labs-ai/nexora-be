@@ -20,8 +20,8 @@ const AiItemSchema = z.object({
     .default('11:00'),
   estimatedCost: z.coerce.number().nonnegative().finite().optional(),
   travelTime: z.coerce.number().int().nonnegative().optional().default(0),
-  imageUrl: z.string().optional(),
-  googleMapsUrl: z.string().optional(),
+  imageUrl: z.string().url().optional(),
+  googleMapsUrl: z.string().url().optional(),
 });
 
 const AiPlanSchema = z.object({
