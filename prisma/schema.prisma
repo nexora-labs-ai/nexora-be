@@ -429,6 +429,7 @@ model ItineraryItem {
   recommendation Recommendation? @relation(fields: [recommendationId], references: [id])
 
   @@index([itineraryId, orderNo])
+  @@index([recommendationId])
   @@map("itinerary_items")
 }
 
