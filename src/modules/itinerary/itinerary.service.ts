@@ -39,15 +39,39 @@ export class ItineraryService {
   }
 
   async createItinerary(groupId: string, dto: CreateItineraryDto, userId: string) {
+    const hasStartDate = dto.startDate !== undefined;
+    const hasEndDate = dto.endDate !== undefined;
+
+    if (hasStartDate !== hasEndDate) {
+      throw new BusinessRuleError('startDate and endDate must be provided together');
+    }
+
+    const now = new Date();
+    const startDate = dto.startDate ? new Date(dto.startDate) : now;
+    const endDate = dto.endDate
+      ? new Date(dto.endDate)
+      : new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+    if (startDate.getTime() >= endDate.getTime()) {
+      throw new BusinessRuleError('startDate must be before endDate');
+    }
+
+    const normalizeToUtcMidnight = (d: Date) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const date = String(d.getDate()).padStart(2, '0');
+      return new Date(`${year}-${month}-${date}T00:00:00.000Z`);
+    };
+
     return this.prisma.itinerary.create({
       data: {
         groupId,
         createdBy: userId,
         title: dto.title,
         description: dto.description,
-        startDate: dto.startDate ? new Date(dto.startDate) : new Date(),
-        endDate: dto.endDate ? new Date(dto.endDate) : new Date(),
-        destination: dto.destination || 'Unknown Destination',
+        startDate: normalizeToUtcMidnight(startDate),
+        endDate: normalizeToUtcMidnight(endDate),
+        destination: dto.destination ?? 'Unknown Destination',
         status: ItineraryStatus.DRAFT,
       },
     });
@@ -307,7 +331,8 @@ export class ItineraryService {
         data: newItems.map((aiItem: AiItineraryItem) => {
           const startDate = itinerary.startDate ? new Date(itinerary.startDate) : new Date();
           const targetDate = new Date(startDate);
-          targetDate.setDate(startDate.getDate() + ((aiItem.day || 1) - 1));
+          targetDate.setUTCDate(startDate.getUTCDate() + ((aiItem.day || 1) - 1));
+
           const dateStr = targetDate.toISOString().split('T')[0];
 
           return {
@@ -351,7 +376,8 @@ export class ItineraryService {
         data: newItems.map((item: AiItineraryItem) => {
           const startDate = itinerary.startDate ? new Date(itinerary.startDate) : new Date();
           const targetDate = new Date(startDate);
-          targetDate.setDate(startDate.getDate() + ((item.day || 1) - 1));
+          targetDate.setUTCDate(startDate.getUTCDate() + ((item.day || 1) - 1));
+
           const dateStr = targetDate.toISOString().split('T')[0];
 
           return {

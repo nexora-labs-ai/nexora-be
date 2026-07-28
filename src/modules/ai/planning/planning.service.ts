@@ -92,7 +92,7 @@ Generate a realistic, well-paced travel itinerary for ${params.destination} from
 
 Group preferences:
 - Duration: ${params.duration} days
-- Budget: ${params.budget ? `${params.budget} ${params.currency || ''}` : 'flexible'}
+- Budget: ${params.budget != null ? `${params.budget} ${params.currency || ''}`.trim() : 'flexible'}
 - Currency: ${params.currency || 'USD'}
 - Interests: ${params.interests?.join(', ') ?? 'general tourism'}
 
@@ -150,7 +150,8 @@ Return exactly a JSON object (no markdown formatting) with the following structu
             data: plan.items.map((item: AiItineraryItem) => {
               const startDate = new Date(params.startDate); // Using group startDate as base
               const targetDate = new Date(startDate);
-              targetDate.setDate(startDate.getDate() + ((item.day || 1) - 1));
+              targetDate.setUTCDate(startDate.getUTCDate() + ((item.day || 1) - 1));
+
               const dateStr = targetDate.toISOString().split('T')[0];
 
               return {
@@ -182,7 +183,7 @@ Return exactly a JSON object (no markdown formatting) with the following structu
   ) {
     const currentItemsStr = itinerary.items
       .map(
-        (i: any) => `
+        (i) => `
 - Day ${Math.floor(i.orderNo / 100) + 1} | ${i.startTime.toISOString().substring(11, 16)} - ${i.endTime.toISOString().substring(11, 16)}: ${i.title} (Location: ${i.location || 'N/A'}, Cost: ${i.estimatedCost || 0}, Travel: ${i.travelTime || 0}m)
 `,
       )

@@ -1,7 +1,7 @@
 import * as crypto from 'node:crypto';
 import { ForbiddenException, Inject, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { GroupRole } from '@prisma/client';
+import { GroupRole, Prisma } from '@prisma/client';
 import {
   BusinessRuleError,
   ConflictError,
@@ -63,7 +63,20 @@ export class GroupsService {
     const data = await this.getGroup(groupId, requestingUserId);
     const totalSpent = await this.groupsRepository.getTotalSpent(groupId);
 
-    return { ...data, totalSpent };
+    const serializeDecimal = (val: Prisma.Decimal.Value | null | undefined): string | null =>
+      val != null ? new Prisma.Decimal(val).toFixed(2) : null;
+
+    return {
+      ...data,
+      budgetGoal: serializeDecimal(data.budgetGoal),
+      fund: data.fund
+        ? {
+            ...data.fund,
+            balance: serializeDecimal(data.fund.balance) ?? '0.00',
+          }
+        : null,
+      totalSpent: serializeDecimal(totalSpent) ?? '0.00',
+    };
   }
 
   async getUserGroups(userId: string, page: number, limit: number) {

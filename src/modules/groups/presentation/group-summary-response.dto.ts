@@ -29,8 +29,12 @@ export class GroupFundSummaryDto {
   @ApiProperty()
   groupId: string;
 
-  @ApiProperty()
-  balance: number;
+  @ApiProperty({
+    type: String,
+    example: '1500000.00',
+    description: 'Decimal monetary value serialized as a string',
+  })
+  balance: string;
 }
 
 export class GroupSummaryResponseDto {
@@ -40,11 +44,11 @@ export class GroupSummaryResponseDto {
   @ApiProperty()
   name: string;
 
-  @ApiPropertyOptional()
-  description?: string;
+  @ApiPropertyOptional({ type: String, nullable: true })
+  description: string | null;
 
-  @ApiPropertyOptional()
-  avatarUrl?: string;
+  @ApiPropertyOptional({ type: String, nullable: true })
+  avatarUrl: string | null;
 
   @ApiProperty({ enum: Currency })
   currency: Currency;
@@ -52,14 +56,19 @@ export class GroupSummaryResponseDto {
   @ApiProperty()
   isActive: boolean;
 
-  @ApiPropertyOptional()
-  startDate?: Date;
+  @ApiPropertyOptional({ type: String, format: 'date-time', nullable: true })
+  startDate: Date | null;
 
-  @ApiPropertyOptional()
-  endDate?: Date;
+  @ApiPropertyOptional({ type: String, format: 'date-time', nullable: true })
+  endDate: Date | null;
 
-  @ApiPropertyOptional()
-  budgetGoal?: number;
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: '5000000.00',
+    description: 'Decimal monetary value serialized as a string',
+  })
+  budgetGoal: string | null;
 
   @ApiProperty()
   createdAt: Date;
@@ -67,15 +76,22 @@ export class GroupSummaryResponseDto {
   @ApiProperty()
   updatedAt: Date;
 
-  @ApiPropertyOptional()
-  deletedAt?: Date;
+  @ApiPropertyOptional({ type: String, format: 'date-time', nullable: true })
+  deletedAt: Date | null;
 
   @ApiProperty({ type: [GroupMemberSummaryDto] })
   members: GroupMemberSummaryDto[];
 
-  @ApiPropertyOptional({ type: GroupFundSummaryDto })
-  fund?: GroupFundSummaryDto;
+  @ApiPropertyOptional({
+    type: GroupFundSummaryDto,
+    nullable: true,
+  })
+  fund: GroupFundSummaryDto | null;
 
-  @ApiPropertyOptional({ type: String })
-  totalSpent?: string;
+  @ApiProperty({
+    type: String,
+    example: '1250000.00',
+    description: 'Total group-fund spending serialized as a decimal string',
+  })
+  totalSpent: string;
 }
