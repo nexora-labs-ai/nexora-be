@@ -2,7 +2,11 @@ import { Injectable } from '@nestjs/common';
 import { ItineraryStatus, Prisma } from '@prisma/client';
 import { BusinessRuleError, NotFoundError } from '../../shared/common/domain-errors';
 import { PrismaService } from '../../shared/database/prisma.service';
-import { AiItineraryItem, PlanningService } from '../ai/planning/planning.service';
+import {
+  AiItineraryItem,
+  PlanningService,
+  buildAiItemDates,
+} from '../ai/planning/planning.service';
 import { Group } from '../groups/domain/group.entity';
 import { CreateItineraryDto } from './dto/create-itinerary.dto';
 import { CreateItineraryItemDto, UpdateItineraryItemDto } from './dto/itinerary-item.dto';
@@ -46,22 +50,25 @@ export class ItineraryService {
       throw new BusinessRuleError('startDate and endDate must be provided together');
     }
 
-    const now = new Date();
-    const startDate = dto.startDate ? new Date(dto.startDate) : now;
-    const endDate = dto.endDate
-      ? new Date(dto.endDate)
-      : new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    let startDate: Date;
+    let endDate: Date;
+
+    if (dto.startDate && dto.endDate) {
+      startDate = new Date(`${dto.startDate}T00:00:00.000Z`);
+      endDate = new Date(`${dto.endDate}T00:00:00.000Z`);
+    } else {
+      const now = new Date();
+      const year = now.getUTCFullYear();
+      const month = String(now.getUTCMonth() + 1).padStart(2, '0');
+      const date = String(now.getUTCDate()).padStart(2, '0');
+
+      startDate = new Date(`${year}-${month}-${date}T00:00:00.000Z`);
+      endDate = new Date(startDate.getTime() + 24 * 60 * 60 * 1000);
+    }
 
     if (startDate.getTime() >= endDate.getTime()) {
       throw new BusinessRuleError('startDate must be before endDate');
     }
-
-    const normalizeToUtcMidnight = (d: Date) => {
-      const year = d.getFullYear();
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const date = String(d.getDate()).padStart(2, '0');
-      return new Date(`${year}-${month}-${date}T00:00:00.000Z`);
-    };
 
     return this.prisma.itinerary.create({
       data: {
@@ -69,8 +76,8 @@ export class ItineraryService {
         createdBy: userId,
         title: dto.title,
         description: dto.description,
-        startDate: normalizeToUtcMidnight(startDate),
-        endDate: normalizeToUtcMidnight(endDate),
+        startDate,
+        endDate,
         destination: dto.destination ?? 'Unknown Destination',
         status: ItineraryStatus.DRAFT,
       },
@@ -330,18 +337,20 @@ export class ItineraryService {
       await tx.itineraryItem.createMany({
         data: newItems.map((aiItem: AiItineraryItem) => {
           const startDate = itinerary.startDate ? new Date(itinerary.startDate) : new Date();
-          const targetDate = new Date(startDate);
-          targetDate.setUTCDate(startDate.getUTCDate() + ((aiItem.day || 1) - 1));
-
-          const dateStr = targetDate.toISOString().split('T')[0];
+          const { startTime, endTime } = buildAiItemDates(
+            startDate,
+            aiItem.day || 1,
+            aiItem.startTime || '09:00',
+            aiItem.endTime || '11:00',
+          );
 
           return {
             itineraryId,
             title: aiItem.title,
             description: aiItem.description,
             location: aiItem.location,
-            startTime: new Date(`${dateStr}T${aiItem.startTime || '09:00'}:00Z`),
-            endTime: new Date(`${dateStr}T${aiItem.endTime || '11:00'}:00Z`),
+            startTime,
+            endTime,
             estimatedCost: aiItem.estimatedCost,
             travelTime: aiItem.travelTime,
             imageUrl: aiItem.imageUrl,
@@ -375,18 +384,20 @@ export class ItineraryService {
       await tx.itineraryItem.createMany({
         data: newItems.map((item: AiItineraryItem) => {
           const startDate = itinerary.startDate ? new Date(itinerary.startDate) : new Date();
-          const targetDate = new Date(startDate);
-          targetDate.setUTCDate(startDate.getUTCDate() + ((item.day || 1) - 1));
-
-          const dateStr = targetDate.toISOString().split('T')[0];
+          const { startTime, endTime } = buildAiItemDates(
+            startDate,
+            item.day || 1,
+            item.startTime || '09:00',
+            item.endTime || '11:00',
+          );
 
           return {
             itineraryId,
             title: item.title,
             description: item.description,
             location: item.location,
-            startTime: new Date(`${dateStr}T${item.startTime || '09:00'}:00Z`),
-            endTime: new Date(`${dateStr}T${item.endTime || '11:00'}:00Z`),
+            startTime,
+            endTime,
             estimatedCost: item.estimatedCost,
             travelTime: item.travelTime,
             imageUrl: item.imageUrl,

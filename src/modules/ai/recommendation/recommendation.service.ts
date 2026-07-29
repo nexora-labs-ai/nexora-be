@@ -1,5 +1,5 @@
 import { BadGatewayException, BadRequestException, Injectable, Logger } from '@nestjs/common';
-import { Prisma, Recommendation, RecommendationType } from '@prisma/client';
+import { Recommendation, RecommendationType } from '@prisma/client';
 import { z } from 'zod';
 import { PrismaService } from '../../../shared/database/prisma.service';
 import { GeminiService } from '../providers/gemini.service';
@@ -11,17 +11,47 @@ const ExpenseRecommendationSchema = z.object({
   priority: z.enum(['high', 'medium', 'low']),
 });
 
-const ExpenseRecommendationsArraySchema = z.array(ExpenseRecommendationSchema);
+const ExpenseRecommendationsArraySchema = z.array(ExpenseRecommendationSchema).min(3).max(5);
 
-const BudgetAnalysisSchema = z.object({
-  summary: z.string().optional(),
-  trends: z.string().optional(),
-  topCategories: z.array(z.string()).optional(),
-  savingOpportunities: z.string().optional(),
-  projectedMonthlySpend: z.number().optional(),
-  error: z.string().optional(),
+const BudgetAnalysisSuccessSchema = z.object({
+  summary: z.string().min(1),
+  trends: z.string().min(1),
+  topCategories: z.array(z.string()),
+  savingOpportunities: z.string().min(1),
+  projectedMonthlySpend: z.coerce.number().nonnegative(),
 });
+
+const BudgetAnalysisErrorSchema = z.object({
+  error: z.string().min(1),
+});
+
+const BudgetAnalysisSchema = z.union([BudgetAnalysisSuccessSchema, BudgetAnalysisErrorSchema]);
 export type BudgetAnalysisResponse = z.infer<typeof BudgetAnalysisSchema>;
+
+const HttpUrlSchema = z
+  .string()
+  .url()
+  .refine((value) => {
+    const url = new URL(value);
+    return url.protocol === 'https:' || url.protocol === 'http:';
+  }, 'URL must use HTTP or HTTPS');
+
+const ALLOWED_MAP_HOSTS = new Set([
+  'google.com',
+  'www.google.com',
+  'maps.google.com',
+  'maps.app.goo.gl',
+]);
+
+const GoogleMapsUrlSchema = z
+  .string()
+  .url()
+  .refine((value) => {
+    const url = new URL(value);
+    if (url.protocol !== 'https:') return false;
+    const hostname = url.hostname.toLowerCase();
+    return ALLOWED_MAP_HOSTS.has(hostname) || hostname.endsWith('.google.com');
+  }, 'Invalid Google Maps URL');
 
 const AiRecommendationItemSchema = z.object({
   type: z.nativeEnum(RecommendationType),
@@ -31,8 +61,8 @@ const AiRecommendationItemSchema = z.object({
   priceRange: z.string().trim().min(1).max(100),
   rating: z.coerce.number().min(0).max(5),
   aiReason: z.string().trim().min(1).max(2000),
-  imageUrl: z.string().url(),
-  googleMapsUrl: z.string().url(),
+  imageUrl: HttpUrlSchema,
+  googleMapsUrl: GoogleMapsUrlSchema,
 });
 
 const AiRecommendationResponseSchema = z.object({

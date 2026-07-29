@@ -7,8 +7,8 @@ export class UserProfileDto {
   @ApiPropertyOptional()
   displayName?: string;
 
-  @ApiPropertyOptional()
-  avatarUrl?: string;
+  @ApiPropertyOptional({ type: String, nullable: true })
+  avatarUrl?: string | null;
 }
 
 export class UserSummaryDto {
@@ -21,6 +21,6 @@ export class UserSummaryDto {
   @ApiProperty()
   status: string;
 
-  @ApiPropertyOptional({ type: UserProfileDto })
-  profile?: UserProfileDto;
+  @ApiPropertyOptional({ type: UserProfileDto, nullable: true })
+  profile?: UserProfileDto | null;
 }

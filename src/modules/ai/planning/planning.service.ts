@@ -1,28 +1,69 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ItineraryItem, ItineraryStatus, Prisma } from '@prisma/client';
+import { ItineraryStatus, Prisma } from '@prisma/client';
 import { z } from 'zod';
+import { BusinessRuleError } from '../../../shared/common/domain-errors';
 import { PrismaService } from '../../../shared/database/prisma.service';
 import { GeminiService } from '../providers/gemini.service';
 
-const AiItemSchema = z.object({
-  day: z.coerce.number().int().min(1).max(60).default(1),
-  order: z.coerce.number().int().min(1).default(1),
-  title: z.string().min(1).max(200),
-  description: z.string().optional(),
-  location: z.string().optional(),
-  startTime: z
-    .string()
-    .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
-    .default('09:00'),
-  endTime: z
-    .string()
-    .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
-    .default('11:00'),
-  estimatedCost: z.coerce.number().nonnegative().finite().optional(),
-  travelTime: z.coerce.number().int().nonnegative().optional().default(0),
-  imageUrl: z.string().url().optional(),
-  googleMapsUrl: z.string().url().optional(),
-});
+const HttpUrlSchema = z
+  .string()
+  .url()
+  .refine((value) => {
+    const url = new URL(value);
+    return url.protocol === 'https:' || url.protocol === 'http:';
+  }, 'URL must use HTTP or HTTPS');
+
+const ALLOWED_MAP_HOSTS = new Set([
+  'google.com',
+  'www.google.com',
+  'maps.google.com',
+  'maps.app.goo.gl',
+]);
+
+const GoogleMapsUrlSchema = z
+  .string()
+  .url()
+  .refine((value) => {
+    const url = new URL(value);
+    if (url.protocol !== 'https:') return false;
+    const hostname = url.hostname.toLowerCase();
+    return ALLOWED_MAP_HOSTS.has(hostname) || hostname.endsWith('.google.com');
+  }, 'Invalid Google Maps URL');
+
+function timeToMinutes(value: string): number {
+  const [hours = 0, minutes = 0] = value.split(':').map(Number);
+  return hours * 60 + minutes;
+}
+
+const AiItemSchema = z
+  .object({
+    day: z.coerce.number().int().min(1).max(60).default(1),
+    order: z.coerce.number().int().min(1).default(1),
+    title: z.string().min(1).max(200),
+    description: z.string().optional(),
+    location: z.string().optional(),
+    startTime: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+      .default('09:00'),
+    endTime: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):[0-5]\d$/)
+      .default('11:00'),
+    estimatedCost: z.coerce.number().nonnegative().finite().optional(),
+    travelTime: z.coerce.number().int().nonnegative().optional().default(0),
+    imageUrl: HttpUrlSchema.optional(),
+    googleMapsUrl: GoogleMapsUrlSchema.optional(),
+  })
+  .superRefine((item, context) => {
+    if (timeToMinutes(item.endTime) <= timeToMinutes(item.startTime)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['endTime'],
+        message: 'endTime must be after startTime',
+      });
+    }
+  });
 
 const AiPlanSchema = z.object({
   title: z.string().min(1),
@@ -64,6 +105,26 @@ export interface AiSingleItemUpdate {
   travelTime?: number;
   imageUrl?: string;
   googleMapsUrl?: string;
+}
+
+export function buildAiItemDates(
+  itineraryStart: Date,
+  day: number,
+  startTimeStr: string,
+  endTimeStr: string,
+): { startTime: Date; endTime: Date } {
+  const targetDate = new Date(itineraryStart);
+  targetDate.setUTCDate(itineraryStart.getUTCDate() + (day - 1));
+
+  const dateStr = targetDate.toISOString().split('T')[0];
+  const startTime = new Date(`${dateStr}T${startTimeStr}:00Z`);
+  const endTime = new Date(`${dateStr}T${endTimeStr}:00Z`);
+
+  if (endTime <= startTime) {
+    throw new BusinessRuleError('endTime must be after startTime');
+  }
+
+  return { startTime, endTime };
 }
 
 @Injectable()
@@ -135,6 +196,12 @@ Return exactly a JSON object (no markdown formatting) with the following structu
       throw new Error('Failed to parse AI itinerary response: Invalid structure');
     }
 
+    for (const [index, item] of plan.items.entries()) {
+      if (item.day > params.duration) {
+        throw new BusinessRuleError(`AI item ${index} is outside the itinerary duration`);
+      }
+    }
+
     return this.prisma.itinerary.create({
       data: {
         groupId: params.groupId,
@@ -149,17 +216,19 @@ Return exactly a JSON object (no markdown formatting) with the following structu
           createMany: {
             data: plan.items.map((item: AiItineraryItem) => {
               const startDate = new Date(params.startDate); // Using group startDate as base
-              const targetDate = new Date(startDate);
-              targetDate.setUTCDate(startDate.getUTCDate() + ((item.day || 1) - 1));
-
-              const dateStr = targetDate.toISOString().split('T')[0];
+              const { startTime, endTime } = buildAiItemDates(
+                startDate,
+                item.day || 1,
+                item.startTime || '09:00',
+                item.endTime || '11:00',
+              );
 
               return {
                 title: item.title,
                 description: item.description,
                 location: item.location,
-                startTime: new Date(`${dateStr}T${item.startTime || '09:00'}:00Z`),
-                endTime: new Date(`${dateStr}T${item.endTime || '11:00'}:00Z`),
+                startTime,
+                endTime,
                 estimatedCost: item.estimatedCost,
                 orderNo: (item.order || 1) + ((item.day || 1) - 1) * 100,
                 travelTime: item.travelTime || 0,
@@ -246,6 +315,19 @@ Please rewrite the itinerary activities to satisfy the user's request. Treat the
     } catch (e) {
       this.logger.error('Failed to parse AI entire plan modification response', e);
       throw new Error('Failed to parse AI entire plan modification response: Invalid structure');
+    }
+
+    const duration =
+      itinerary.endDate && itinerary.startDate
+        ? Math.ceil(
+            (itinerary.endDate.getTime() - itinerary.startDate.getTime()) / (1000 * 3600 * 24),
+          ) + 1
+        : 60;
+
+    for (const [index, item] of newPlan.items.entries()) {
+      if ((item.day || 1) > duration) {
+        throw new BusinessRuleError(`AI item ${index} is outside the itinerary duration`);
+      }
     }
 
     return newPlan.items;
