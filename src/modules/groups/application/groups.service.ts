@@ -1,7 +1,7 @@
 import * as crypto from 'node:crypto';
 import { ForbiddenException, Inject, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { GroupRole } from '@prisma/client';
+import { GroupRole, Prisma } from '@prisma/client';
 import {
   BusinessRuleError,
   ConflictError,
@@ -28,7 +28,7 @@ import { InviteMemberDto } from '../presentation/invite-member.dto';
 import { UpdateGroupDto } from '../presentation/update-group.dto';
 import { WithdrawFundDto } from '../presentation/withdraw-fund.dto';
 
-export type GroupPayload = {
+export type GroupAuthContext = {
   id: string;
   name: string | null;
   avatarUrl?: string | null;
@@ -50,12 +50,33 @@ export class GroupsService {
 
   async getGroup(groupId: string, requestingUserId: string) {
     const data = await this.groupsRepository.findById(groupId);
+
     if (!data) throw new NotFoundError('Group', groupId);
 
     const group = this.toDomain(data);
     group.assertMember(requestingUserId);
 
     return data;
+  }
+
+  async getGroupSummary(groupId: string, requestingUserId: string) {
+    const data = await this.getGroup(groupId, requestingUserId);
+    const totalSpent = await this.groupsRepository.getTotalSpent(groupId);
+
+    const serializeDecimal = (val: Prisma.Decimal.Value | null | undefined): string | null =>
+      val != null ? new Prisma.Decimal(val).toFixed(2) : null;
+
+    return {
+      ...data,
+      budgetGoal: serializeDecimal(data.budgetGoal),
+      fund: data.fund
+        ? {
+            ...data.fund,
+            balance: serializeDecimal(data.fund.balance) ?? '0.00',
+          }
+        : null,
+      totalSpent: serializeDecimal(totalSpent) ?? '0.00',
+    };
   }
 
   async getUserGroups(userId: string, page: number, limit: number) {
@@ -67,6 +88,9 @@ export class GroupsService {
       name: dto.name,
       description: dto.description,
       currency: dto.currency ?? 'USD',
+      startDate: dto.startDate,
+      endDate: dto.endDate,
+      budgetGoal: dto.budgetGoal,
       createdByUserId: createdBy,
     });
 
@@ -95,9 +119,25 @@ export class GroupsService {
       }
     }
 
+    const nextStartDateStr =
+      dto.startDate !== undefined ? dto.startDate : data.startDate?.toISOString();
+    const nextEndDateStr = dto.endDate !== undefined ? dto.endDate : data.endDate?.toISOString();
+
+    // Convert to Date objects to check if both exist and compare
+    if (nextStartDateStr && nextEndDateStr) {
+      const nextStartDate = new Date(nextStartDateStr);
+      const nextEndDate = new Date(nextEndDateStr);
+      if (nextStartDate >= nextEndDate) {
+        throw new BusinessRuleError('startDate must be before endDate');
+      }
+    }
+
     const updated = await this.groupsRepository.update(groupId, {
       name: dto.name,
       description: dto.description,
+      startDate: dto.startDate,
+      endDate: dto.endDate,
+      budgetGoal: dto.budgetGoal,
       currency: dto.currency,
     });
     await this.cacheService.del(CacheService.keys.group(groupId));
@@ -362,7 +402,7 @@ export class GroupsService {
     );
   }
 
-  private toDomain(data: GroupPayload): Group {
+  private toDomain(data: GroupAuthContext): Group {
     return new Group(
       data.id,
       data.name ?? '',

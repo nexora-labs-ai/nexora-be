@@ -29,7 +29,6 @@ import { ItineraryService } from './itinerary.service';
 
 class GenerateItineraryDto {
   @ApiProperty() @IsString() destination: string;
-  @ApiProperty() @IsNumber() duration: number;
   @ApiPropertyOptional() @IsOptional() @IsNumber() budget?: number;
   @ApiPropertyOptional() @IsOptional() @IsArray() interests?: string[];
 }

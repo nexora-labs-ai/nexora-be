@@ -176,6 +176,9 @@ model Group {
   description String?
   avatarUrl   String?   @map("avatar_url")
   currency    Currency  @default(VND)
+  startDate   DateTime? @map("start_date")
+  endDate     DateTime? @map("end_date")
+  budgetGoal  Decimal?  @map("budget_goal") @db.Decimal(18, 2)
   isActive    Boolean   @default(true) @map("is_active")
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
@@ -346,18 +349,18 @@ model ExpenseAttachment {
 }
 
 model Settlement {
-  id         String           @id @default(uuid()) @db.Uuid
-  groupId    String           @map("group_id") @db.Uuid
-  fromUserId String           @map("from_user_id") @db.Uuid
-  toUserId   String           @map("to_user_id") @db.Uuid
-  amount     Decimal          @db.Decimal(18, 2)
-  currency   Currency
-  status     SettlementStatus @default(PENDING)
-  evidenceUrl String?         @map("evidence_url")
-  note       String?
-  settledAt  DateTime?        @map("settled_at")
-  createdAt  DateTime         @default(now()) @map("created_at")
-  updatedAt  DateTime         @updatedAt @map("updated_at")
+  id          String           @id @default(uuid()) @db.Uuid
+  groupId     String           @map("group_id") @db.Uuid
+  fromUserId  String           @map("from_user_id") @db.Uuid
+  toUserId    String           @map("to_user_id") @db.Uuid
+  amount      Decimal          @db.Decimal(18, 2)
+  currency    Currency
+  status      SettlementStatus @default(PENDING)
+  evidenceUrl String?          @map("evidence_url")
+  note        String?
+  settledAt   DateTime?        @map("settled_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
 
   group    Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
   fromUser User  @relation("SettlementFrom", fields: [fromUserId], references: [id])
@@ -393,8 +396,8 @@ model Itinerary {
   title       String
   description String?
   destination String
-  startDate   DateTime
-  endDate     DateTime
+  startDate   DateTime        @db.Date
+  endDate     DateTime        @db.Date
   status      ItineraryStatus @default(DRAFT)
   createdAt   DateTime        @default(now()) @map("created_at")
   updatedAt   DateTime        @updatedAt @map("updated_at")
@@ -407,21 +410,26 @@ model Itinerary {
 }
 
 model ItineraryItem {
-  id            String   @id @default(uuid()) @db.Uuid
-  itineraryId   String   @map("itinerary_id") @db.Uuid
-  title         String
-  description   String?
-  location      String?
-  startTime     DateTime
-  endTime       DateTime
-  estimatedCost Decimal? @map("estimated_cost") @db.Decimal(18, 2)
-  orderNo       Int      @map("order_no")
-  notes         String?
-  travelTime    Int?     @map("travel_time")
+  id               String   @id @default(uuid()) @db.Uuid
+  itineraryId      String   @map("itinerary_id") @db.Uuid
+  title            String
+  description      String?
+  location         String?
+  startTime        DateTime
+  endTime          DateTime
+  estimatedCost    Decimal? @map("estimated_cost") @db.Decimal(18, 2)
+  orderNo          Int      @map("order_no")
+  notes            String?
+  travelTime       Int?     @map("travel_time")
+  recommendationId String?  @map("recommendation_id") @db.Uuid
+  imageUrl         String?  @map("image_url")
+  googleMapsUrl    String?  @map("google_maps_url")
 
-  itinerary Itinerary @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
+  itinerary      Itinerary       @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
+  recommendation Recommendation? @relation(fields: [recommendationId], references: [id])
 
   @@index([itineraryId, orderNo])
+  @@index([recommendationId])
   @@map("itinerary_items")
 }
 
@@ -437,9 +445,10 @@ model Recommendation {
   expiresAt DateTime?          @map("expires_at")
   createdAt DateTime           @default(now()) @map("created_at")
 
-  group   Group                @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  creator User                 @relation("RecommendationCreatedBy", fields: [createdBy], references: [id])
-  likes   RecommendationLike[]
+  group          Group                @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  creator        User                 @relation("RecommendationCreatedBy", fields: [createdBy], references: [id])
+  likes          RecommendationLike[]
+  itineraryItems ItineraryItem[]
 
   @@map("recommendations")
 }

@@ -1,7 +1,88 @@
-import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
-import { RecommendationType } from '@prisma/client';
+import { BadGatewayException, BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { Recommendation, RecommendationType } from '@prisma/client';
+import { z } from 'zod';
 import { PrismaService } from '../../../shared/database/prisma.service';
 import { GeminiService } from '../providers/gemini.service';
+
+const ExpenseRecommendationSchema = z.object({
+  type: z.nativeEnum(RecommendationType),
+  title: z.string().trim().min(1).max(200),
+  content: z.string().trim().min(1).max(5000),
+  priority: z.enum(['high', 'medium', 'low']),
+});
+
+const ExpenseRecommendationsArraySchema = z.array(ExpenseRecommendationSchema).min(3).max(5);
+
+const BudgetAnalysisSuccessSchema = z.object({
+  summary: z.string().min(1),
+  trends: z.string().min(1),
+  topCategories: z.array(z.string()),
+  savingOpportunities: z.string().min(1),
+  projectedMonthlySpend: z.coerce.number().nonnegative(),
+});
+
+const BudgetAnalysisErrorSchema = z.object({
+  error: z.string().min(1),
+});
+
+const BudgetAnalysisSchema = z.union([BudgetAnalysisSuccessSchema, BudgetAnalysisErrorSchema]);
+export type BudgetAnalysisResponse = z.infer<typeof BudgetAnalysisSchema>;
+
+const HttpUrlSchema = z
+  .string()
+  .url()
+  .refine((value) => {
+    const url = new URL(value);
+    return url.protocol === 'https:' || url.protocol === 'http:';
+  }, 'URL must use HTTP or HTTPS');
+
+const ALLOWED_MAP_HOSTS = new Set([
+  'google.com',
+  'www.google.com',
+  'maps.google.com',
+  'maps.app.goo.gl',
+]);
+
+const GoogleMapsUrlSchema = z
+  .string()
+  .url()
+  .refine((value) => {
+    const url = new URL(value);
+    if (url.protocol !== 'https:') return false;
+    const hostname = url.hostname.toLowerCase();
+    return ALLOWED_MAP_HOSTS.has(hostname) || hostname.endsWith('.google.com');
+  }, 'Invalid Google Maps URL');
+
+const AiRecommendationItemSchema = z.object({
+  type: z.nativeEnum(RecommendationType),
+  title: z.string().trim().min(1).max(200),
+  content: z.string().trim().min(1).max(5000),
+  address: z.string().trim().min(1).max(500),
+  priceRange: z.string().trim().min(1).max(100),
+  rating: z.coerce.number().min(0).max(5),
+  aiReason: z.string().trim().min(1).max(2000),
+  imageUrl: HttpUrlSchema,
+  googleMapsUrl: GoogleMapsUrlSchema,
+});
+
+const AiRecommendationResponseSchema = z.object({
+  introMessage: z.string().trim().min(1).max(1000),
+  recommendations: z.array(AiRecommendationItemSchema).min(1).max(5),
+});
+
+const AiRecommendationErrorSchema = z.object({
+  error: z.string().trim().min(1).max(1000),
+});
+
+const AiRecommendationEnvelopeSchema = z.union([
+  AiRecommendationErrorSchema,
+  AiRecommendationResponseSchema,
+]);
+
+export type AiPlacesRecommendationResponse = {
+  introMessage: string;
+  recommendations: Recommendation[];
+};
 
 @Injectable()
 export class RecommendationAiService {
@@ -13,7 +94,6 @@ export class RecommendationAiService {
   ) {}
 
   async generateExpenseRecommendations(groupId: string): Promise<void> {
-    // Fetch context data
     const [expenses, membersCount, owner] = await Promise.all([
       this.prisma.expense.findMany({
         where: { groupId, deletedAt: null },
@@ -42,27 +122,31 @@ Group: ${membersCount} members
 Total spent: ${totalSpent}
 Spending by category: ${JSON.stringify(byCategory, null, 2)}
 
-Provide recommendations in JSON format:
+Provide recommendations in JSON format as an array of objects:
 [
   {
-    "type": "RESTAURANT|CAFE|HOTEL|ACTIVITY|ITINERARY",
+    "type": "RESTAURANT" | "CAFE" | "HOTEL" | "ACTIVITY" | "ITINERARY",
     "title": "Short title",
     "content": "Detailed recommendation",
-    "priority": "high|medium|low"
+    "priority": "high" | "medium" | "low"
   }
 ]
 
 Return only valid JSON.`;
 
-    let recommendations: Array<{ type: string; title: string; content: string; priority: string }>;
+    let recommendations: z.infer<typeof ExpenseRecommendationsArraySchema>;
     try {
-      recommendations = await this.geminiService.generateJsonContent(prompt);
-    } catch {
-      this.logger.error('Failed to parse AI recommendations');
+      const raw = await this.geminiService.generateJsonContent(prompt);
+      const parsed = ExpenseRecommendationsArraySchema.safeParse(raw);
+      if (!parsed.success) {
+        throw new SyntaxError('Invalid AI expense recommendation format');
+      }
+      recommendations = parsed.data;
+    } catch (e) {
+      this.logger.error('Failed to parse AI recommendations', e);
       return;
     }
 
-    // Owner is already fetched at the beginning of the function
     if (!owner) {
       this.logger.error('Cannot generate recommendations without a group owner');
       return;
@@ -75,9 +159,7 @@ Return only valid JSON.`;
       data: recommendations.map((r) => ({
         groupId,
         createdBy: owner.userId,
-        type:
-          RecommendationType[r.type.toUpperCase() as keyof typeof RecommendationType] ||
-          RecommendationType.ACTIVITY,
+        type: r.type,
         title: r.title,
         content: { body: r.content, priority: r.priority },
         expiresAt,
@@ -85,7 +167,7 @@ Return only valid JSON.`;
     });
   }
 
-  async generateBudgetAnalysis(groupId: string): Promise<Record<string, unknown>> {
+  async generateBudgetAnalysis(groupId: string): Promise<BudgetAnalysisResponse> {
     const expenses = await this.prisma.expense.findMany({
       where: { groupId, deletedAt: null },
       include: { category: true },
@@ -100,8 +182,14 @@ ${JSON.stringify(expenses.map((e) => ({ amount: e.amount, category: e.category?.
 Return JSON with: { summary, trends, topCategories, savingOpportunities, projectedMonthlySpend }`;
 
     try {
-      return await this.geminiService.generateJsonContent(prompt);
-    } catch {
+      const raw = await this.geminiService.generateJsonContent(prompt);
+      const parsed = BudgetAnalysisSchema.safeParse(raw);
+      if (!parsed.success) {
+        throw new SyntaxError('Invalid AI budget analysis format');
+      }
+      return parsed.data;
+    } catch (e) {
+      this.logger.error('Analysis failed', e);
       return { error: 'Analysis failed' };
     }
   }
@@ -112,7 +200,7 @@ Return JSON with: { summary, trends, topCategories, savingOpportunities, project
     location: string,
     createdBy: string,
     batchId: string,
-  ) {
+  ): Promise<AiPlacesRecommendationResponse> {
     const prompt = `
 Generate 3-5 place recommendations for a group based on this request: "${userInput}".
 The location is strictly: "${location}".
@@ -120,8 +208,12 @@ CRITICAL: ALL recommendations MUST strictly be located in "${location}". Do not 
 IMPORTANT: If the request ("${userInput}") or the location ("${location}") is pure gibberish, nonsensical, violates policies, or is impossible to fulfill, YOU MUST RETURN THIS EXACT JSON (do not return an array):
 { "error": "Sorry, I can't find any suggestions for this request or location. Please enter it more clearly!" }
 
-Otherwise, provide the recommendations in a structured JSON array. Each object should have:
-- type: "RESTAURANT" or "CAFE" or "ACTIVITY" or "HOTEL"
+Otherwise, provide a friendly intro message and the recommendations in a structured JSON object. The object MUST have the following structure:
+{
+  "introMessage": "A friendly, conversational introductory message based on the user's request (e.g., 'Here are some great spots I found for your trip to Hanoi!')",
+  "recommendations": [
+    // Array of objects with the following fields:
+- type: "RESTAURANT" | "CAFE" | "ACTIVITY" | "HOTEL" | "ITINERARY"
 - title: Name of the place
 - content: Description of the place
 - address: A realistic address (fake or real but believable)
@@ -130,70 +222,51 @@ Otherwise, provide the recommendations in a structured JSON array. Each object s
 - aiReason: A detailed explanation of why this place matches the request.
 - imageUrl: Provide a generic placeholder image URL related to the place type (e.g., from Unsplash source or a mock URL).
 - googleMapsUrl: A valid Google Maps search URL for this place (e.g., "https://www.google.com/maps/search/?api=1&query=Place+Name")
+  ]
+}
 
 Return ONLY valid JSON.
 `;
 
-    type AIErrorResponse = { error: string };
-    type AIRecommendationResponse = Array<{
-      type: string;
-      title: string;
-      content: string;
-      address: string;
-      priceRange: string;
-      rating: number;
-      aiReason: string;
-      imageUrl: string;
-      googleMapsUrl: string;
-    }>;
-    type AIResponse = AIErrorResponse | AIRecommendationResponse;
-
-    let rawResponse: AIResponse;
+    let parsed: z.infer<typeof AiRecommendationEnvelopeSchema>;
 
     try {
-      rawResponse = await this.geminiService.generateJsonContent<AIResponse>(prompt);
+      const raw = await this.geminiService.generateJsonContent(prompt);
+      const parseResult = AiRecommendationEnvelopeSchema.safeParse(raw);
+      if (!parseResult.success) {
+        throw new SyntaxError('Invalid format');
+      }
+      parsed = parseResult.data;
     } catch (e) {
       this.logger.error('Failed to parse AI places recommendations', e);
-      throw new Error('AI returned invalid JSON');
+      throw new BadGatewayException('AI returned invalid data format');
     }
 
-    if (!Array.isArray(rawResponse) && 'error' in rawResponse) {
-      throw new BadRequestException(rawResponse.error);
+    if ('error' in parsed) {
+      throw new BadRequestException(parsed.error);
     }
 
-    if (!Array.isArray(rawResponse)) {
-      throw new BadRequestException('AI returned data that is not in array format.');
-    }
-
-    const recommendations = rawResponse;
+    const { introMessage, recommendations } = parsed;
 
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
 
-    const created = await Promise.all(
-      recommendations.map((r) =>
+    const created = await this.prisma.$transaction(
+      recommendations.map((recommendation) =>
         this.prisma.recommendation.create({
           data: {
             groupId,
             createdBy,
-            type: (() => {
-              const parsedType =
-                RecommendationType[r.type.toUpperCase() as keyof typeof RecommendationType];
-              if (!parsedType) {
-                this.logger.error(`Invalid recommendation type returned from AI: ${r.type}`);
-                throw new Error(`Invalid recommendation type: ${r.type}`);
-              }
-              return parsedType;
-            })(),
-            title: r.title,
+            type: recommendation.type,
+            title: recommendation.title,
             content: {
-              description: r.content,
-              address: r.address,
-              priceRange: r.priceRange,
-              rating: r.rating,
-              aiReason: r.aiReason,
-              imageUrl: r.imageUrl,
-              googleMapsUrl: r.googleMapsUrl,
+              description: recommendation.content,
+              address: recommendation.address,
+              priceRange: recommendation.priceRange,
+              rating: recommendation.rating,
+              aiReason: recommendation.aiReason,
+              imageUrl: recommendation.imageUrl,
+              googleMapsUrl: recommendation.googleMapsUrl,
             },
             metadata: { batchId, topic: userInput, location },
             expiresAt,
@@ -202,6 +275,6 @@ Return ONLY valid JSON.
       ),
     );
 
-    return created;
+    return { introMessage, recommendations: created };
   }
 }

@@ -2,7 +2,11 @@ import { Injectable } from '@nestjs/common';
 import { ItineraryStatus, Prisma } from '@prisma/client';
 import { BusinessRuleError, NotFoundError } from '../../shared/common/domain-errors';
 import { PrismaService } from '../../shared/database/prisma.service';
-import { AiItineraryItem, PlanningService } from '../ai/planning/planning.service';
+import {
+  AiItineraryItem,
+  PlanningService,
+  buildAiItemDates,
+} from '../ai/planning/planning.service';
 import { Group } from '../groups/domain/group.entity';
 import { CreateItineraryDto } from './dto/create-itinerary.dto';
 import { CreateItineraryItemDto, UpdateItineraryItemDto } from './dto/itinerary-item.dto';
@@ -39,15 +43,42 @@ export class ItineraryService {
   }
 
   async createItinerary(groupId: string, dto: CreateItineraryDto, userId: string) {
+    const hasStartDate = dto.startDate !== undefined;
+    const hasEndDate = dto.endDate !== undefined;
+
+    if (hasStartDate !== hasEndDate) {
+      throw new BusinessRuleError('startDate and endDate must be provided together');
+    }
+
+    let startDate: Date;
+    let endDate: Date;
+
+    if (dto.startDate && dto.endDate) {
+      startDate = new Date(`${dto.startDate}T00:00:00.000Z`);
+      endDate = new Date(`${dto.endDate}T00:00:00.000Z`);
+    } else {
+      const now = new Date();
+      const year = now.getUTCFullYear();
+      const month = String(now.getUTCMonth() + 1).padStart(2, '0');
+      const date = String(now.getUTCDate()).padStart(2, '0');
+
+      startDate = new Date(`${year}-${month}-${date}T00:00:00.000Z`);
+      endDate = new Date(startDate.getTime() + 24 * 60 * 60 * 1000);
+    }
+
+    if (startDate.getTime() >= endDate.getTime()) {
+      throw new BusinessRuleError('startDate must be before endDate');
+    }
+
     return this.prisma.itinerary.create({
       data: {
         groupId,
         createdBy: userId,
         title: dto.title,
         description: dto.description,
-        startDate: dto.startDate ? new Date(dto.startDate) : new Date(),
-        endDate: dto.endDate ? new Date(dto.endDate) : new Date(),
-        destination: dto.destination || 'Unknown Destination',
+        startDate,
+        endDate,
+        destination: dto.destination ?? 'Unknown Destination',
         status: ItineraryStatus.DRAFT,
       },
     });
@@ -57,15 +88,44 @@ export class ItineraryService {
     groupId: string,
     params: {
       destination: string;
-      duration: number;
       budget?: number;
       interests?: string[];
       requestedBy: string;
     },
   ) {
+    const group = await this.prisma.group.findUnique({
+      where: { id: groupId },
+      select: { startDate: true, endDate: true, budgetGoal: true, currency: true },
+    });
+
+    if (!group) throw new NotFoundError('Group', groupId);
+
+    const start = group.startDate ? new Date(group.startDate) : new Date();
+    const end = group.endDate
+      ? new Date(group.endDate)
+      : new Date(start.getTime() + 3 * 24 * 3600 * 1000); // 3 days fallback
+
+    if (start.getTime() >= end.getTime()) {
+      throw new BusinessRuleError(
+        'Group date range is invalid (startDate >= endDate). Please update the group dates before generating an itinerary.',
+      );
+    }
+
+    const duration = Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) + 1;
+
+    let finalBudget = params.budget;
+    if (finalBudget === undefined || finalBudget === null) {
+      finalBudget = group.budgetGoal == null ? undefined : Number(group.budgetGoal);
+    }
+
     return this.planningService.generateItinerary({
       groupId,
+      startDate: start,
+      endDate: end,
+      duration,
       ...params,
+      budget: finalBudget,
+      currency: group.currency,
     });
   }
 
@@ -79,7 +139,16 @@ export class ItineraryService {
   }
 
   async createItineraryItem(itineraryId: string, dto: CreateItineraryItemDto, userId: string) {
-    await this.assertItineraryAccess(itineraryId, userId);
+    const itinerary = await this.assertItineraryAccess(itineraryId, userId);
+
+    if (dto.recommendationId) {
+      const rec = await this.prisma.recommendation.findFirst({
+        where: { id: dto.recommendationId, groupId: itinerary.groupId },
+      });
+      if (!rec) {
+        throw new BusinessRuleError('Invalid recommendation ID for this group');
+      }
+    }
 
     // Determine orderNo
     let orderNo = dto.orderNo;
@@ -89,6 +158,10 @@ export class ItineraryService {
         orderBy: { orderNo: 'desc' },
       });
       orderNo = lastItem ? lastItem.orderNo + 1 : 1;
+    }
+
+    if (new Date(dto.endTime).getTime() <= new Date(dto.startTime).getTime()) {
+      throw new BusinessRuleError('endTime must be after startTime');
     }
 
     let estimatedCost = null;
@@ -110,6 +183,10 @@ export class ItineraryService {
         estimatedCost,
         orderNo,
         notes: dto.notes,
+        travelTime: dto.travelTime,
+        recommendationId: dto.recommendationId,
+        imageUrl: dto.imageUrl,
+        googleMapsUrl: dto.googleMapsUrl,
       },
     });
   }
@@ -161,7 +238,16 @@ export class ItineraryService {
     dto: UpdateItineraryItemDto,
     userId: string,
   ) {
-    await this.assertItineraryAccess(itineraryId, userId);
+    const itinerary = await this.assertItineraryAccess(itineraryId, userId);
+
+    if (dto.recommendationId) {
+      const rec = await this.prisma.recommendation.findFirst({
+        where: { id: dto.recommendationId, groupId: itinerary.groupId },
+      });
+      if (!rec) {
+        throw new BusinessRuleError('Invalid recommendation ID for this group');
+      }
+    }
 
     const item = await this.prisma.itineraryItem.findUnique({ where: { id: itemId } });
     if (!item || item.itineraryId !== itineraryId) {
@@ -197,6 +283,9 @@ export class ItineraryService {
           orderNo: dto.orderNo,
           notes: dto.notes,
           travelTime: dto.travelTime,
+          recommendationId: dto.recommendationId,
+          imageUrl: dto.imageUrl,
+          googleMapsUrl: dto.googleMapsUrl,
         },
       });
 
@@ -229,7 +318,10 @@ export class ItineraryService {
 
     const itinerary = await this.prisma.itinerary.findUnique({
       where: { id: itineraryId },
-      include: { items: { orderBy: { orderNo: 'asc' } } },
+      include: {
+        items: { orderBy: { orderNo: 'asc' } },
+        group: { select: { currency: true } },
+      },
     });
     if (!itinerary) throw new NotFoundError('Itinerary', itineraryId);
 
@@ -245,18 +337,24 @@ export class ItineraryService {
       await tx.itineraryItem.createMany({
         data: newItems.map((aiItem: AiItineraryItem) => {
           const startDate = itinerary.startDate ? new Date(itinerary.startDate) : new Date();
-          const targetDate = new Date(startDate);
-          targetDate.setDate(startDate.getDate() + ((aiItem.day || 1) - 1));
-          const dateStr = targetDate.toISOString().split('T')[0];
+          const { startTime, endTime } = buildAiItemDates(
+            startDate,
+            aiItem.day || 1,
+            aiItem.startTime || '09:00',
+            aiItem.endTime || '11:00',
+          );
 
           return {
             itineraryId,
             title: aiItem.title,
             description: aiItem.description,
             location: aiItem.location,
-            startTime: new Date(`${dateStr}T${aiItem.startTime || '09:00'}:00Z`),
-            endTime: new Date(`${dateStr}T${aiItem.endTime || '11:00'}:00Z`),
+            startTime,
+            endTime,
             estimatedCost: aiItem.estimatedCost,
+            travelTime: aiItem.travelTime,
+            imageUrl: aiItem.imageUrl,
+            googleMapsUrl: aiItem.googleMapsUrl,
             orderNo: (aiItem.order || 1) + ((aiItem.day || 1) - 1) * 100,
           };
         }),
@@ -271,7 +369,10 @@ export class ItineraryService {
 
     const itinerary = await this.prisma.itinerary.findUnique({
       where: { id: itineraryId },
-      include: { items: { orderBy: { orderNo: 'asc' } } },
+      include: {
+        items: { orderBy: { orderNo: 'asc' } },
+        group: { select: { currency: true } },
+      },
     });
     if (!itinerary) throw new NotFoundError('Itinerary', itineraryId);
 
@@ -283,18 +384,24 @@ export class ItineraryService {
       await tx.itineraryItem.createMany({
         data: newItems.map((item: AiItineraryItem) => {
           const startDate = itinerary.startDate ? new Date(itinerary.startDate) : new Date();
-          const targetDate = new Date(startDate);
-          targetDate.setDate(startDate.getDate() + ((item.day || 1) - 1));
-          const dateStr = targetDate.toISOString().split('T')[0];
+          const { startTime, endTime } = buildAiItemDates(
+            startDate,
+            item.day || 1,
+            item.startTime || '09:00',
+            item.endTime || '11:00',
+          );
 
           return {
             itineraryId,
             title: item.title,
             description: item.description,
             location: item.location,
-            startTime: new Date(`${dateStr}T${item.startTime || '09:00'}:00Z`),
-            endTime: new Date(`${dateStr}T${item.endTime || '11:00'}:00Z`),
+            startTime,
+            endTime,
             estimatedCost: item.estimatedCost,
+            travelTime: item.travelTime,
+            imageUrl: item.imageUrl,
+            googleMapsUrl: item.googleMapsUrl,
             orderNo: (item.order || 1) + ((item.day || 1) - 1) * 100,
           };
         }),
