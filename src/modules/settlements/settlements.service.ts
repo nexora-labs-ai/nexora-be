@@ -15,6 +15,7 @@ import { SettlementsRepository } from './settlements.repository';
 
 export const SETTLEMENT_EVENTS = {
   REQUESTED: 'settlement.requested',
+  REMINDED: 'settlement.reminded',
   COMPLETED: 'settlement.completed',
   CANCELLED: 'settlement.cancelled',
 } as const;
@@ -52,26 +53,6 @@ export class SettlementsService {
     // 1. Simplify based on TRUE balances (excluding pending)
     const optimized = DebtSimplifier.simplify(numericBalances);
 
-    // 2. Subtract pending payments from the resulting debts to hide the Settle Up button
-    const pendingSettlements = groupSettlements.filter((s) => s.status === 'PENDING');
-
-    for (const pending of pendingSettlements) {
-      // Find a matching simplified debt where pending payer is supposed to pay pending payee
-      const matchIndex = optimized.findIndex(
-        (o) => o.fromUserId === pending.fromUserId && o.toUserId === pending.toUserId,
-      );
-
-      if (matchIndex !== -1) {
-        const match = optimized[matchIndex];
-        if (match) {
-          match.amount -= Number(pending.amount);
-          if (match.amount <= 0) {
-            optimized.splice(matchIndex, 1);
-          }
-        }
-      }
-    }
-
     return optimized;
   }
 
@@ -104,6 +85,37 @@ export class SettlementsService {
     return settlement;
   }
 
+  async remindSettlement(
+    groupId: string,
+    fromUserId: string,
+    targetUserId: string,
+    amount: number,
+  ) {
+    await this.groupsService.getGroup(groupId, fromUserId);
+
+    if (fromUserId === targetUserId) {
+      throw new BusinessRuleError('Cannot remind yourself');
+    }
+
+    const cacheKey = `settlement:remind:${groupId}:${fromUserId}:${targetUserId}`;
+    const recentlyReminded = await this.cacheService.get(cacheKey);
+    if (recentlyReminded) {
+      throw new BusinessRuleError('Please wait before sending another reminder');
+    }
+
+    // Rate limit reminder to once per hour (3600 seconds)
+    await this.cacheService.set(cacheKey, true, 3600);
+
+    this.eventEmitter.emit(SETTLEMENT_EVENTS.REMINDED, {
+      groupId,
+      fromUserId,
+      targetUserId,
+      amount,
+    });
+
+    return { success: true };
+  }
+
   async completeSettlement(id: string, requestingUserId: string) {
     const settlement = await this.settlementsRepository.findById(id);
     if (!settlement) throw new NotFoundError('Settlement', id);
@@ -126,12 +138,16 @@ export class SettlementsService {
     const settlement = await this.settlementsRepository.findById(id);
     if (!settlement) throw new NotFoundError('Settlement', id);
 
-    if (settlement.fromUserId !== requestingUserId) {
-      throw new ForbiddenError('Only the payer can cancel a settlement');
+    if (settlement.fromUserId !== requestingUserId && settlement.toUserId !== requestingUserId) {
+      throw new ForbiddenError('Only the payer or payee can cancel/reject a settlement');
     }
 
     const cancelled = await this.settlementsRepository.cancel(id);
     await this.cacheService.del(CacheService.keys.settlement(settlement.groupId!));
+
+    // Clear remind rate limit so creditor can remind again immediately if they rejected
+    const remindCacheKey = `settlement:remind:${settlement.groupId}:${settlement.toUserId}:${settlement.fromUserId}`;
+    await this.cacheService.del(remindCacheKey);
 
     return cancelled;
   }

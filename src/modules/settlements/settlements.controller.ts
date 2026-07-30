@@ -17,6 +17,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../shared/common/decorators/current-user.decorator';
 import { CreateSettlementDto } from './dto/create-settlement.dto';
+import { RemindSettlementDto } from './dto/remind-settlement.dto';
 import { SettlementsService } from './settlements.service';
 
 @ApiTags('settlements')
@@ -53,6 +54,17 @@ export class SettlementsController {
       dto.amount,
       dto.currency ?? 'USD',
       dto.note,
+    );
+  }
+
+  @Post('remind')
+  @ApiOperation({ summary: 'Remind a user to settle their debt' })
+  remind(@CurrentUser('id') userId: string, @Body() dto: RemindSettlementDto) {
+    return this.settlementsService.remindSettlement(
+      dto.groupId,
+      userId,
+      dto.targetUserId,
+      dto.amount,
     );
   }
 
