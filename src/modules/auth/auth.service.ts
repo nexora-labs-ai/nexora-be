@@ -245,7 +245,9 @@ export class AuthService {
 
     const refreshToken = crypto.randomBytes(32).toString('hex');
     const hashedToken = crypto.createHash('sha256').update(refreshToken).digest('hex');
-    const expiresAt = addDays(new Date(), 7);
+    const refreshExpiresInConfig = this.configService.get<string>('jwt.refreshExpiresIn') || '7d';
+    const refreshExpiresInSeconds = this.parseDuration(refreshExpiresInConfig);
+    const expiresAt = new Date(Date.now() + refreshExpiresInSeconds * 1000);
 
     await this.authRepository.createRefreshToken({
       token: hashedToken,

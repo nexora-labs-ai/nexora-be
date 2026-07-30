@@ -1,9 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ExpenseSplitType, GroupRole } from '@prisma/client';
 import { ForbiddenError, NotFoundError } from '../../../shared/common/domain-errors';
 import { Money } from '../../../shared/common/value-objects/money';
 import { CacheService } from '../../../shared/infrastructure/cache/cache.service';
+import { STORAGE_PORT, StoragePort } from '../../../shared/infrastructure/ports/storage.port';
 import { RealtimeService } from '../../../shared/realtime/realtime.service';
 import { GeminiService } from '../../ai/providers/gemini.service';
 import { GroupsService } from '../../groups/application/groups.service';
@@ -24,6 +25,7 @@ export class ExpensesService {
     private readonly realtimeService: RealtimeService,
     private readonly eventEmitter: EventEmitter2,
     private readonly geminiService: GeminiService,
+    @Inject(STORAGE_PORT) private readonly storage: StoragePort,
   ) {}
 
   async getGroupExpenses(
@@ -39,7 +41,21 @@ export class ExpensesService {
     const filterKey = `${filters?.categoryId ?? '_'}:${filters?.payerId ?? '_'}`;
     return this.cacheService.getOrSet(
       `${CacheService.keys.groupExpenses(groupId)}:${page}:${limit}:${filterKey}`,
-      () => this.expensesRepository.findGroupExpenses(groupId, page, limit, filters),
+      async () => {
+        const result = await this.expensesRepository.findGroupExpenses(
+          groupId,
+          page,
+          limit,
+          filters,
+        );
+        return {
+          ...result,
+          data: result.data.map((exp) => ({
+            ...exp,
+            receiptUrl: (exp as any).attachments?.[0]?.fileUrl,
+          })),
+        };
+      },
       60, // 1 minute cache
     );
   }
@@ -50,7 +66,10 @@ export class ExpensesService {
 
     // Verify membership
     await this.groupsService.getGroup(expense.groupId!, requestingUserId);
-    return expense;
+    return {
+      ...expense,
+      receiptUrl: (expense as any).attachments?.[0]?.fileUrl,
+    };
   }
 
   async createExpense(dto: CreateExpenseDto, payerId: string) {
@@ -88,6 +107,7 @@ export class ExpensesService {
           })(),
         fundingSource: dto.fundingSource,
         date: dto.date ? new Date(dto.date) : undefined,
+        receiptUrl: dto.receiptUrl,
       },
       splits,
     );
@@ -255,13 +275,28 @@ export class ExpensesService {
         (c) => c.name.toLowerCase() === result.category.toLowerCase(),
       );
 
+      const uploadResponse = await this.uploadReceiptEvidence(file);
+
       return {
         ...result,
         categoryId: matchedCategory?.id,
+        receiptUrl: uploadResponse.receiptUrl,
       };
     } catch (error) {
       this.logger.error('Failed to analyze receipt', error);
       throw new Error('Failed to analyze receipt image');
     }
+  }
+
+  async uploadReceiptEvidence(file: Express.Multer.File) {
+    if (!file) {
+      throw new Error('No receipt image provided');
+    }
+    const uploadResponse = await this.storage.upload({
+      key: `receipts/${Date.now()}-${file.originalname}`,
+      buffer: file.buffer,
+      mimeType: file.mimetype,
+    });
+    return { receiptUrl: uploadResponse.url };
   }
 }

@@ -82,4 +82,9 @@ export class CreateExpenseDto {
   @ValidateNested({ each: true })
   @Type(() => SplitParticipantDto)
   splits?: SplitParticipantDto[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  receiptUrl?: string;
 }

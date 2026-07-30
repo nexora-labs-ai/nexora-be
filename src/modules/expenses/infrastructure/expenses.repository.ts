@@ -20,6 +20,7 @@ export class ExpensesRepository {
       include: {
         payers: true,
         splits: true,
+        attachments: true,
       },
     });
   }
@@ -49,6 +50,7 @@ export class ExpensesRepository {
         include: {
           payers: true,
           splits: true,
+          attachments: true,
         },
         orderBy: { date: 'desc' },
         ...buildPrismaSkipTake(page, limit),
@@ -71,6 +73,7 @@ export class ExpensesRepository {
       fundingSource: FundingSource;
       categoryId: string;
       date?: Date;
+      receiptUrl?: string;
     },
     splits: { userId: string; amount: number; shares?: number }[],
   ) {
@@ -120,6 +123,12 @@ export class ExpensesRepository {
               })),
             },
           },
+
+          attachments: data.receiptUrl
+            ? {
+                create: [{ uploadedBy: data.createdBy, fileUrl: data.receiptUrl }],
+              }
+            : undefined,
         },
       });
 
@@ -154,6 +163,7 @@ export class ExpensesRepository {
       include: {
         payers: true,
         splits: true,
+        attachments: true,
       },
     });
   }
@@ -274,6 +284,7 @@ export class ExpensesRepository {
       include: {
         payers: true,
         splits: true,
+        attachments: true,
       },
     });
   }

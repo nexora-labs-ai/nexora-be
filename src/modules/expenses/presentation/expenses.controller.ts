@@ -91,4 +91,23 @@ export class ExpensesController {
   analyzeReceipt(@UploadedFile() file: Express.Multer.File) {
     return this.expensesService.analyzeReceipt(file);
   }
+
+  @Post('upload-receipt')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiOperation({ summary: 'Upload receipt image as evidence' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+    },
+  })
+  uploadReceipt(@UploadedFile() file: Express.Multer.File) {
+    return this.expensesService.uploadReceiptEvidence(file);
+  }
 }

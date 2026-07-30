@@ -11,4 +11,9 @@ export class WithdrawFundDto {
   @IsOptional()
   @IsString()
   note?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  evidenceUrl?: string;
 }

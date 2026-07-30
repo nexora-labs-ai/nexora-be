@@ -224,7 +224,13 @@ export class GroupsRepository {
     return expensesCount > 0 || settlementsCount > 0 || fundTransactionsCount > 0;
   }
 
-  async contributeFund(groupId: string, userId: string, amount: number, note?: string) {
+  async contributeFund(
+    groupId: string,
+    userId: string,
+    amount: number,
+    note?: string,
+    evidenceUrl?: string,
+  ) {
     return this.prisma.$transaction(async (tx) => {
       // 1. Get or create GroupFund
       let fund = await tx.groupFund.findUnique({
@@ -258,6 +264,7 @@ export class GroupsRepository {
           type: 'CONTRIBUTION',
           amount,
           note,
+          evidenceUrl,
         },
       });
 
@@ -265,7 +272,13 @@ export class GroupsRepository {
     });
   }
 
-  async withdrawFund(groupId: string, userId: string, amount: number, note?: string) {
+  async withdrawFund(
+    groupId: string,
+    userId: string,
+    amount: number,
+    note?: string,
+    evidenceUrl?: string,
+  ) {
     return this.prisma.$transaction(async (tx) => {
       const fundRes = await tx.groupFund.updateMany({
         where: { groupId, balance: { gte: amount } },
@@ -287,6 +300,7 @@ export class GroupsRepository {
           type: 'REFUND',
           amount,
           note,
+          evidenceUrl,
         },
       });
 

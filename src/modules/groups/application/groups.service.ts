@@ -425,6 +425,7 @@ export class GroupsService {
       requestingUserId,
       dto.amount,
       dto.note,
+      dto.evidenceUrl,
     );
     await this.cacheService.del(CacheService.keys.group(groupId));
     return result;
@@ -435,16 +436,14 @@ export class GroupsService {
     if (!data) throw new NotFoundError('Group', groupId);
 
     const group = this.toDomain(data);
-    const member = data.members.find((m) => m.userId === requestingUserId);
-    if (!member || member.role !== GroupRole.OWNER) {
-      throw new ForbiddenError('Only the group owner can withdraw fund');
-    }
+    group.assertMember(requestingUserId);
 
     const result = await this.groupsRepository.withdrawFund(
       groupId,
       requestingUserId,
       dto.amount,
       dto.note,
+      dto.evidenceUrl,
     );
     await this.cacheService.del(CacheService.keys.group(groupId));
     return result;

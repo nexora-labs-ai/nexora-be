@@ -14,4 +14,9 @@ export class ContributeFundDto {
   @IsOptional()
   @IsString()
   note?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  evidenceUrl?: string;
 }
