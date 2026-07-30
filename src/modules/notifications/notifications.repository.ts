@@ -105,4 +105,12 @@ export class NotificationsRepository {
       }
     }
   }
+
+  async updateDeviceToken(userId: string, fcmToken: string) {
+    return this.prisma.notificationSettings.upsert({
+      where: { userId },
+      update: { fcmToken },
+      create: { userId, fcmToken },
+    });
+  }
 }
