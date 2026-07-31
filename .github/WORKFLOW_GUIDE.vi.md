@@ -586,10 +586,15 @@ Dependabot chạy mỗi thứ Hai theo timezone `Asia/Bangkok`:
 - 02:00: dependency thuộc ecosystem npm/Yarn.
 - 02:30: GitHub Actions.
 
-Dependency được nhóm thành:
+Các version update định kỳ chỉ tự động nhận bản minor và patch, sau đó được nhóm thành:
 
-- Production dependencies.
-- Development dependencies.
+- Một PR cho production dependencies minor/patch.
+- Một PR cho development dependencies minor/patch.
+- Một PR cho toàn bộ GitHub Actions minor/patch.
+
+Dependabot bỏ qua các major version update định kỳ. Major upgrade phải được thực hiện bằng PR
+riêng, có migration plan, changelog review và test phù hợp. Quy tắc ignore này không tắt Dependabot
+security updates; bot vẫn có thể đề xuất bản vá major nếu đó là cách cần thiết để xử lý lỗ hổng.
 
 Mỗi ecosystem giới hạn tối đa 5 PR đang mở để tránh tạo quá nhiều PR cùng lúc.
 
