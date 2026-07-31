@@ -1,0 +1,86 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: GitHub Environment to deploy
+        required: true
+        default: staging
+        type: choice
+        options:
+          - staging
+          - production
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: ${{ inputs.environment }}
+      url: ${{ vars.APP_URL }}
+    env:
+      DEPLOY_WEBHOOK_URL: ${{ secrets.DEPLOY_WEBHOOK_URL }}
+      APP_HEALTH_URL: ${{ vars.APP_HEALTH_URL }}
+    steps:
+      - name: Validate environment configuration
+        run: |
+          if [ -z "${DEPLOY_WEBHOOK_URL}" ]; then
+            echo "::error::DEPLOY_WEBHOOK_URL is not configured in the '${{ inputs.environment }}' environment."
+            exit 1
+          fi
+
+      - name: Trigger deployment
+        run: |
+          curl \
+            --fail-with-body \
+            --silent \
+            --show-error \
+            --retry 3 \
+            --retry-all-errors \
+            --connect-timeout 10 \
+            --max-time 60 \
+            --request POST \
+            "${DEPLOY_WEBHOOK_URL}"
+
+      - name: Wait for application health
+        if: env.APP_HEALTH_URL != ''
+        run: |
+          # Avoid accepting the still-healthy old revision immediately after an async deploy hook.
+          sleep 30
+
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error --max-time 10 "${APP_HEALTH_URL}" > /dev/null; then
+              echo "Application is healthy: ${APP_HEALTH_URL}"
+              exit 0
+            fi
+
+            echo "Health check ${attempt}/30 is not ready yet."
+            sleep 10
+          done
+
+          echo "::error::Application did not become healthy within 5 minutes."
+          exit 1
+
+      - name: Warn when health verification is disabled
+        if: env.APP_HEALTH_URL == ''
+        run: echo "::warning::APP_HEALTH_URL is not configured; post-deploy verification was skipped."
+
+      - name: Write deployment summary
+        if: always()
+        run: |
+          {
+            echo "## Deployment"
+            echo
+            echo "- Environment: \`${{ inputs.environment }}\`"
+            echo "- Commit: \`${{ github.sha }}\`"
+            echo "- Triggered by: \`${{ github.actor }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
