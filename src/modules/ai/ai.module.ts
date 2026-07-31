@@ -6,11 +6,7 @@ import { RecommendationAiService } from './recommendation/recommendation.service
 @Module({
   imports: [],
   controllers: [],
-  providers: [
-    RecommendationAiService,
-    PlanningService,
-    GeminiService,
-  ],
+  providers: [RecommendationAiService, PlanningService, GeminiService],
   exports: [GeminiService, PlanningService, RecommendationAiService],
 })
-export class AiModule { }
+export class AiModule {}

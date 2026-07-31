@@ -1,7 +1,8 @@
-import type { INestApplication } from '@nestjs/common';
+import { type INestApplication, ValidationPipe, VersioningType } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
-import * as request from 'supertest';
+import request from 'supertest';
 import { AppModule } from '../src/app.module';
+import { ResponseInterceptor } from '../src/shared/common/interceptors/response.interceptor';
 
 describe('Auth (e2e)', () => {
   let app: INestApplication;
@@ -12,6 +13,21 @@ describe('Auth (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
+    app.enableVersioning({
+      type: VersioningType.URI,
+      defaultVersion: '1',
+      prefix: 'v',
+    });
+    app.setGlobalPrefix('api');
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+        transformOptions: { enableImplicitConversion: true },
+      }),
+    );
+    app.useGlobalInterceptors(new ResponseInterceptor());
     await app.init();
   });
 
@@ -24,7 +40,6 @@ describe('Auth (e2e)', () => {
       .post('/api/v1/auth/register')
       .send({
         email: `test_${Date.now()}@example.com`,
-        username: `testuser_${Date.now()}`,
         displayName: 'Test User',
         password: 'Test1234!',
       })

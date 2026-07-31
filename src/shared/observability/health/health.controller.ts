@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, VERSION_NEUTRAL, Version } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import {
   DiskHealthIndicator,
@@ -22,6 +22,7 @@ export class HealthController {
   ) {}
 
   @Public()
+  @Version(VERSION_NEUTRAL)
   @Get()
   @HealthCheck()
   check() {
@@ -33,12 +34,14 @@ export class HealthController {
   }
 
   @Public()
+  @Version(VERSION_NEUTRAL)
   @Get('ready')
   ready() {
     return { status: 'ok', timestamp: new Date().toISOString() };
   }
 
   @Public()
+  @Version(VERSION_NEUTRAL)
   @Get('live')
   live() {
     return { status: 'ok' };

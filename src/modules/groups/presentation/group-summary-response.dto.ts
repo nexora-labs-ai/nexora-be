@@ -18,8 +18,8 @@ export class GroupMemberSummaryDto {
   @ApiProperty()
   joinedAt: Date;
 
-  @ApiPropertyOptional({ type: UserSummaryDto })
-  user?: UserSummaryDto;
+  @ApiProperty({ type: UserSummaryDto })
+  user: UserSummaryDto;
 }
 
 export class GroupFundSummaryDto {

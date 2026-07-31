@@ -2,12 +2,15 @@ pre-commit:
   parallel: false
   commands:
     biome:
-      glob: "*.{ts,tsx,js,jsx,json}"
-      run: npx biome check --write --no-errors-on-unmatched --files-ignore-unknown=true {staged_files}
+      glob: "*.{ts,tsx,js,jsx,cjs,mjs,json}"
+      run: >-
+        node node_modules/@biomejs/biome/bin/biome
+        check --write --no-errors-on-unmatched --files-ignore-unknown=true
+        {staged_files}
       stage_fixed: true
 
 pre-push:
   parallel: false
   commands:
     build:
-      run: npm run build
+      run: node .github/scripts/check-node-version.cjs && node node_modules/prisma/build/index.js generate && node node_modules/@nestjs/cli/bin/nest.js build

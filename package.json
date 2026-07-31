@@ -5,6 +5,15 @@
   "author": "Nexora Engineering",
   "private": true,
   "license": "UNLICENSED",
+  "packageManager": "yarn@1.22.22",
+  "engines": {
+    "node": ">=22 <23",
+    "yarn": "1.22.x"
+  },
+  "volta": {
+    "node": "22.17.1",
+    "yarn": "1.22.22"
+  },
   "scripts": {
     "dev": "nest start --watch",
     "build": "nest build",
@@ -106,6 +115,7 @@
     "@types/passport-jwt": "^4.0.1",
     "@types/passport-local": "^1.0.38",
     "@types/streamifier": "^0.1.2",
+    "@types/supertest": "^6.0.3",
     "@types/uuid": "^9.0.7",
     "jest": "^29.7.0",
     "lefthook": "^1.8.4",
@@ -132,6 +142,14 @@
       "^@/(.*)$": "<rootDir>/$1",
       "^@shared/(.*)$": "<rootDir>/shared/$1",
       "^@modules/(.*)$": "<rootDir>/modules/$1"
+    },
+    "coverageThreshold": {
+      "global": {
+        "statements": 10,
+        "branches": 7,
+        "functions": 7,
+        "lines": 10
+      }
     }
   }
 }

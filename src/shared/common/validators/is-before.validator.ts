@@ -19,9 +19,8 @@ export class IsBeforeConstraint implements ValidatorConstraintInterface {
     const valueDate = new Date(propertyValue);
     const relatedDate = new Date(relatedValue as string | number | Date);
 
-    // Check if dates are valid
     if (Number.isNaN(valueDate.getTime()) || Number.isNaN(relatedDate.getTime())) {
-      return true; // Let IsDateString handle invalid dates
+      return false;
     }
 
     return valueDate.getTime() < relatedDate.getTime();
