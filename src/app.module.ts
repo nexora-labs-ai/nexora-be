@@ -8,9 +8,11 @@ import { WinstonModule } from 'nest-winston';
 
 import appConfig from './shared/config/app.config';
 import awsConfig from './shared/config/aws.config';
+import cloudinaryConfig from './shared/config/cloudinary.config';
 import databaseConfig from './shared/config/database.config';
 import { validateEnv } from './shared/config/env.validation';
 import jwtConfig from './shared/config/jwt.config';
+import mezonConfig from './shared/config/mezon.config';
 import openaiConfig from './shared/config/openai.config';
 import redisConfig from './shared/config/redis.config';
 
@@ -27,6 +29,7 @@ import { AiModule } from './modules/ai/ai.module';
 // Feature Modules
 import { AuthModule } from './modules/auth/auth.module';
 import { ExpensesModule } from './modules/expenses/expenses.module';
+import { GroupChatModule } from './modules/group-chat/group-chat.module';
 import { GroupsModule } from './modules/groups/groups.module';
 import { ItineraryModule } from './modules/itinerary/itinerary.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
@@ -39,7 +42,16 @@ import { UsersModule } from './modules/users/users.module';
     // Configuration
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [appConfig, databaseConfig, redisConfig, jwtConfig, awsConfig, openaiConfig],
+      load: [
+        appConfig,
+        databaseConfig,
+        redisConfig,
+        jwtConfig,
+        awsConfig,
+        openaiConfig,
+        mezonConfig,
+        cloudinaryConfig,
+      ],
       envFilePath: ['.env.local', '.env'],
       cache: true,
       validate: validateEnv,
@@ -89,6 +101,7 @@ import { UsersModule } from './modules/users/users.module';
     ItineraryModule,
     RecommendationsModule,
     AiModule,
+    GroupChatModule,
   ],
   providers: [
     {

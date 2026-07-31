@@ -4,6 +4,7 @@ import { IsEmail, IsString, Matches, MaxLength, MinLength } from 'class-validato
 export class RegisterDto {
   @ApiProperty({ example: 'john@example.com' })
   @IsEmail()
+  @MaxLength(255)
   email: string;
 
   @ApiProperty({ example: 'John Doe' })

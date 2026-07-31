@@ -61,4 +61,11 @@ export class SettlementsRepository {
       data: { status: SettlementStatus.CANCELLED },
     });
   }
+
+  async updateEvidence(id: string, evidenceUrl: string) {
+    return this.prisma.settlement.update({
+      where: { id },
+      data: { evidenceUrl },
+    });
+  }
 }

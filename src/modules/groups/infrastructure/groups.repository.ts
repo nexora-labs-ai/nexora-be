@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { Currency, GroupRole } from '@prisma/client';
+import { Currency, GroupRole, Prisma } from '@prisma/client';
+import { BusinessRuleError, NotFoundError } from '../../../shared/common/domain-errors';
 import {
   PaginatedResult,
   buildPaginationMeta,
@@ -15,34 +16,73 @@ export class GroupsRepository {
     return this.prisma.group.findUnique({
       where: { id, deletedAt: null },
       include: {
-        members: { include: { user: { include: { profile: true } } } },
+        members: {
+          where: { leftAt: null, user: { deletedAt: null } },
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                status: true,
+                profile: {
+                  select: {
+                    userId: true,
+                    displayName: true,
+                    avatarUrl: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        fund: true,
       },
     });
+  }
+
+  async getTotalSpent(groupId: string): Promise<string> {
+    const expensesAgg = await this.prisma.expense.aggregate({
+      where: {
+        groupId,
+        deletedAt: null,
+        fundingSource: 'GROUP_FUND',
+      },
+      _sum: { amount: true },
+    });
+    return expensesAgg._sum.amount ? expensesAgg._sum.amount.toString() : '0';
   }
 
   async findByIdWithMembers(id: string) {
     return this.prisma.group.findUnique({
       where: { id, deletedAt: null },
-      include: { members: true },
+      select: {
+        id: true,
+        name: true,
+        avatarUrl: true,
+        currency: true,
+        startDate: true,
+        endDate: true,
+        members: {
+          where: { leftAt: null, user: { deletedAt: null } },
+          select: { userId: true, role: true },
+        },
+      },
     });
   }
 
-  async findUserGroups(
-    userId: string,
-    page: number,
-    limit: number,
-  ): Promise<PaginatedResult<unknown>> {
+  async findUserGroups(userId: string, page: number, limit: number) {
     const where = {
       deletedAt: null,
-      members: { some: { userId } },
+      members: { some: { userId, leftAt: null } },
     };
 
     const [data, total] = await Promise.all([
       this.prisma.group.findMany({
         where,
         include: {
-          members: { where: { userId } },
-          _count: { select: { members: true, expenses: true } },
+          members: { where: { userId, leftAt: null, user: { deletedAt: null } } },
+          _count: { select: { members: { where: { leftAt: null } }, expenses: true } },
+          fund: true,
         },
         orderBy: { updatedAt: 'desc' },
         ...buildPrismaSkipTake(page, limit),
@@ -57,6 +97,9 @@ export class GroupsRepository {
     name: string;
     description?: string;
     currency: string;
+    startDate?: string;
+    endDate?: string;
+    budgetGoal?: number;
     createdByUserId: string;
   }) {
     return this.prisma.group.create({
@@ -64,19 +107,45 @@ export class GroupsRepository {
         name: data.name,
         description: data.description,
         currency: data.currency as Currency,
+        startDate: data.startDate ? new Date(data.startDate) : null,
+        endDate: data.endDate ? new Date(data.endDate) : null,
+        budgetGoal: data.budgetGoal,
         members: {
           create: {
             userId: data.createdByUserId,
             role: GroupRole.OWNER,
           },
         },
+        fund: {
+          create: {
+            balance: 0,
+          },
+        },
       },
-      include: { members: true },
+      include: { members: true, fund: true },
     });
   }
 
-  async update(id: string, data: Partial<{ name: string; description: string }>) {
-    return this.prisma.group.update({ where: { id }, data });
+  async update(
+    id: string,
+    data: Partial<{
+      name: string;
+      description: string;
+      avatarUrl: string;
+      currency: Currency;
+      startDate: string | null;
+      endDate: string | null;
+      budgetGoal: number | null;
+    }>,
+  ) {
+    const prismaData: Prisma.GroupUpdateInput = {
+      ...data,
+      startDate:
+        data.startDate === null ? null : data.startDate ? new Date(data.startDate) : undefined,
+      endDate: data.endDate === null ? null : data.endDate ? new Date(data.endDate) : undefined,
+    };
+
+    return this.prisma.group.update({ where: { id }, data: prismaData });
   }
 
   async softDelete(id: string) {
@@ -103,6 +172,153 @@ export class GroupsRepository {
     return this.prisma.groupMember.updateMany({
       where: { groupId, userId },
       data: { role },
+    });
+  }
+
+  // --- Invitations ---
+
+  async createInvitation(data: {
+    groupId: string;
+    email: string;
+    invitedBy: string;
+    token: string;
+  }) {
+    return this.prisma.groupInvitation.create({
+      data: {
+        groupId: data.groupId,
+        email: data.email,
+        invitedBy: data.invitedBy,
+        token: data.token,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+      },
+    });
+  }
+
+  async findInvitationByToken(token: string) {
+    return this.prisma.groupInvitation.findUnique({
+      where: { token },
+      include: { group: true },
+    });
+  }
+
+  async acceptInvitation(id: string) {
+    return this.prisma.groupInvitation.update({
+      where: { id },
+      data: { acceptedAt: new Date() },
+    });
+  }
+
+  async deleteInvitation(id: string) {
+    return this.prisma.groupInvitation.delete({
+      where: { id },
+    });
+  }
+
+  async hasFinancialTransactions(groupId: string): Promise<boolean> {
+    const [expensesCount, settlementsCount, fundTransactionsCount] = await Promise.all([
+      this.prisma.expense.count({ where: { groupId } }),
+      this.prisma.settlement.count({ where: { groupId } }),
+      this.prisma.fundTransaction.count({ where: { fund: { groupId } } }),
+    ]);
+
+    return expensesCount > 0 || settlementsCount > 0 || fundTransactionsCount > 0;
+  }
+
+  async contributeFund(groupId: string, userId: string, amount: number, note?: string) {
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Get or create GroupFund
+      let fund = await tx.groupFund.findUnique({
+        where: { groupId },
+      });
+
+      if (!fund) {
+        fund = await tx.groupFund.create({
+          data: {
+            groupId,
+            balance: 0,
+          },
+        });
+      }
+
+      // 2. Update balance
+      const updatedFund = await tx.groupFund.update({
+        where: { id: fund.id },
+        data: {
+          balance: {
+            increment: amount,
+          },
+        },
+      });
+
+      // 3. Create FundTransaction
+      const transaction = await tx.fundTransaction.create({
+        data: {
+          fundId: fund.id,
+          createdBy: userId,
+          type: 'CONTRIBUTION',
+          amount,
+          note,
+        },
+      });
+
+      return { fund: updatedFund, transaction };
+    });
+  }
+
+  async withdrawFund(groupId: string, userId: string, amount: number, note?: string) {
+    return this.prisma.$transaction(async (tx) => {
+      const fundRes = await tx.groupFund.updateMany({
+        where: { groupId, balance: { gte: amount } },
+        data: { balance: { decrement: amount } },
+      });
+
+      if (fundRes.count === 0) {
+        const fund = await tx.groupFund.findUnique({ where: { groupId } });
+        if (!fund) throw new NotFoundError('GroupFund', groupId);
+        throw new BusinessRuleError('Insufficient group fund balance for withdrawal');
+      }
+
+      const updatedFund = await tx.groupFund.findUniqueOrThrow({ where: { groupId } });
+
+      const transaction = await tx.fundTransaction.create({
+        data: {
+          fundId: updatedFund.id,
+          createdBy: userId,
+          type: 'REFUND',
+          amount,
+          note,
+        },
+      });
+
+      return { fund: updatedFund, transaction };
+    });
+  }
+
+  async findFundTransactions(groupId: string) {
+    const fund = await this.prisma.groupFund.findUnique({
+      where: { groupId },
+      select: { id: true },
+    });
+
+    if (!fund) return [];
+
+    return this.prisma.fundTransaction.findMany({
+      where: { fundId: fund.id },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        creator: {
+          select: {
+            id: true,
+            email: true,
+            profile: {
+              select: {
+                displayName: true,
+                avatarUrl: true,
+              },
+            },
+          },
+        },
+      },
     });
   }
 }

@@ -1,14 +1,16 @@
 import { Module } from '@nestjs/common';
-import { AiController } from './ai.controller';
-import { ChatService } from './chat/chat.service';
-import { MemoryService } from './memory/memory.service';
 import { PlanningService } from './planning/planning.service';
+import { GeminiService } from './providers/gemini.service';
 import { RecommendationAiService } from './recommendation/recommendation.service';
 
 @Module({
   imports: [],
-  controllers: [AiController],
-  providers: [ChatService, MemoryService, RecommendationAiService, PlanningService],
-  exports: [ChatService, MemoryService],
+  controllers: [],
+  providers: [
+    RecommendationAiService,
+    PlanningService,
+    GeminiService,
+  ],
+  exports: [GeminiService, PlanningService, RecommendationAiService],
 })
-export class AiModule {}
+export class AiModule { }

@@ -17,10 +17,6 @@ export class Group {
     return this.getMemberRole(userId) === GroupRole.OWNER;
   }
 
-  isAdmin(userId: string): boolean {
-    return this.isOwner(userId);
-  }
-
   isMember(userId: string): boolean {
     return this.members.some((m) => m.userId === userId);
   }
@@ -28,12 +24,6 @@ export class Group {
   assertMember(userId: string): void {
     if (!this.isMember(userId)) {
       throw new ForbiddenError('You are not a member of this group');
-    }
-  }
-
-  assertAdmin(userId: string): void {
-    if (!this.isAdmin(userId)) {
-      throw new ForbiddenError('You must be a group admin to perform this action');
     }
   }
 

@@ -1,14 +1,17 @@
+import * as crypto from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { AuthProvider, UserRole, UserStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { addDays } from 'date-fns';
-import { v4 as uuidv4 } from 'uuid';
+import { OAuth2Client } from 'google-auth-library';
 import { ConflictError, UnauthorizedError } from '../../shared/common/domain-errors';
+import { generateProviderEmail } from '../../shared/common/utils/provider.utils';
 import { UsersService } from '../users/users.service';
 import { AuthRepository } from './auth.repository';
 import { RegisterDto } from './dto/register.dto';
+import { MezonAuthService, MezonUserInfo } from './mezon-auth.service';
 import { JwtPayload } from './strategies/jwt.strategy';
 
 export interface AuthTokens {
@@ -27,12 +30,14 @@ export interface GoogleUserPayload {
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
+  private readonly googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
   constructor(
     private readonly authRepository: AuthRepository,
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly mezonAuthService: MezonAuthService,
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthTokens> {
@@ -87,30 +92,138 @@ export class AuthService {
   }
 
   async validateGoogleUser(payload: GoogleUserPayload) {
-    let user = await this.usersService.findByEmail(payload.email);
-
-    if (!user) {
-      user = await this.usersService.create({
-        email: payload.email,
-        displayName: payload.displayName,
-        avatarUrl: payload.avatarUrl,
-        provider: AuthProvider.GOOGLE,
-        providerId: payload.providerId,
-      });
+    let user = await this.usersService.findByProvider(AuthProvider.GOOGLE, payload.providerId);
+    if (user) {
+      return user;
     }
 
-    return user;
+    const emailToUse =
+      payload.email || generateProviderEmail(AuthProvider.GOOGLE, payload.providerId);
+
+    user = await this.usersService.findByEmail(emailToUse);
+    if (user) {
+      await this.usersService.linkAuthAccount(user.id, AuthProvider.GOOGLE, payload.providerId);
+      return user;
+    }
+
+    return this.usersService.create({
+      email: emailToUse,
+      displayName: payload.displayName,
+      avatarUrl: payload.avatarUrl,
+      provider: AuthProvider.GOOGLE,
+      providerId: payload.providerId,
+    });
+  }
+
+  async loginWithGoogleToken(idToken: string): Promise<AuthTokens> {
+    try {
+      const ticket = await this.googleClient.verifyIdToken({
+        idToken,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+
+      const payload = ticket.getPayload();
+      if (!payload || !payload.email) {
+        throw new UnauthorizedError('Invalid Google token');
+      }
+
+      if (payload.email_verified !== true) {
+        throw new UnauthorizedError('Google email is not verified');
+      }
+
+      if (!['accounts.google.com', 'https://accounts.google.com'].includes(payload.iss)) {
+        throw new UnauthorizedError('Invalid token issuer');
+      }
+
+      const user = await this.validateGoogleUser({
+        providerId: payload.sub,
+        email: payload.email,
+        displayName: payload.name || 'Google User',
+        avatarUrl: payload.picture,
+      });
+
+      return this.generateTokens(user.id, user.email!, user.role || UserRole.USER);
+    } catch (error) {
+      const err = error as Error;
+      this.logger.error(`Google token verification failed: ${err.message}`, err.stack);
+      throw new UnauthorizedError('Invalid Google token');
+    }
+  }
+
+  /**
+   * Orchestrator: Run the entire Mezon OAuth2 flow → Return system JWT
+   */
+  async loginWithMezon(code: string, redirectUri?: string): Promise<AuthTokens> {
+    const resolvedRedirectUri =
+      redirectUri ?? this.configService.get<string>('mezon.redirectUri') ?? '';
+
+    if (!resolvedRedirectUri) {
+      throw new UnauthorizedError(
+        'redirect_uri is required. Provide it in request body or set MEZON_REDIRECT_URI env var.',
+      );
+    }
+
+    const tokenResponse = await this.mezonAuthService.exchangeCodeForToken(
+      code,
+      resolvedRedirectUri,
+    );
+
+    const mezonUserInfo = await this.mezonAuthService.getMezonUserInfo(tokenResponse.access_token);
+
+    const user = await this.validateMezonUser(mezonUserInfo);
+
+    return this.login(user.id, user.email ?? '', user.role ?? UserRole.USER);
+  }
+
+  /**
+   * Step 3: Find or create user in DB based on Mezon info
+   * Pattern: Find by email first, if not found then create new with AuthProvider.MEZON
+   */
+  async validateMezonUser(mezonUser: MezonUserInfo) {
+    let user = await this.usersService.findByProvider(AuthProvider.MEZON, mezonUser.sub);
+    if (user) {
+      return user;
+    }
+
+    const emailToUse = mezonUser.email || generateProviderEmail(AuthProvider.MEZON, mezonUser.sub);
+
+    // Check if a user with this email already exists
+    user = await this.usersService.findByEmail(emailToUse);
+    if (user) {
+      // Link the new Mezon auth account to the existing user
+      await this.usersService.linkAuthAccount(user.id, AuthProvider.MEZON, mezonUser.sub);
+      return user;
+    }
+
+    // Not found → Create new user with MEZON provider
+    const newUser = await this.usersService.create({
+      email: emailToUse,
+      displayName: mezonUser.name ?? 'Mezon User',
+      avatarUrl: mezonUser.picture,
+      provider: AuthProvider.MEZON,
+      providerId: mezonUser.sub,
+    });
+    return newUser;
   }
 
   async refreshTokens(token: string): Promise<AuthTokens> {
-    const stored = await this.authRepository.findRefreshToken(token);
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+    const stored = await this.authRepository.findRefreshToken(hashedToken);
 
     if (!stored || !stored.expiresAt || stored.expiresAt < new Date() || !stored.user) {
       throw new UnauthorizedError('Invalid or expired refresh token');
     }
 
     // Rotate: revoke old, issue new
-    await this.authRepository.revokeRefreshToken(token);
+    const deleteResult = await this.authRepository.revokeRefreshToken(hashedToken);
+
+    if (deleteResult.count === 0) {
+      // Token reuse detected or race condition lost
+      await this.authRepository.revokeAllUserTokens(stored.user.id);
+      this.logger.warn(`Token reuse detected for user ${stored.user.id}. All sessions revoked.`);
+      throw new UnauthorizedError('Token reuse detected. All sessions revoked for security.');
+    }
+
     return this.generateTokens(
       stored.user.id,
       stored.user.email || '',
@@ -130,19 +243,42 @@ export class AuthService {
       expiresIn: this.configService.get<string>('jwt.accessExpiresIn'),
     });
 
-    const refreshToken = uuidv4();
+    const refreshToken = crypto.randomBytes(32).toString('hex');
+    const hashedToken = crypto.createHash('sha256').update(refreshToken).digest('hex');
     const expiresAt = addDays(new Date(), 7);
 
     await this.authRepository.createRefreshToken({
-      token: refreshToken,
+      token: hashedToken,
       userId,
       expiresAt,
     });
 
+    const expiresInConfig = this.configService.get<string>('jwt.accessExpiresIn') || '15m';
+    const expiresIn = this.parseDuration(expiresInConfig);
+
     return {
       accessToken,
       refreshToken,
-      expiresIn: 900, // 15 minutes
+      expiresIn,
     };
+  }
+
+  private parseDuration(duration: string): number {
+    const match = duration.match(/^(\d+)([smhd])$/);
+    if (!match) return 900;
+    const value = Number.parseInt(match[1]!, 10);
+    const unit = match[2]!;
+    switch (unit) {
+      case 's':
+        return value;
+      case 'm':
+        return value * 60;
+      case 'h':
+        return value * 3600;
+      case 'd':
+        return value * 86400;
+      default:
+        return 900;
+    }
   }
 }

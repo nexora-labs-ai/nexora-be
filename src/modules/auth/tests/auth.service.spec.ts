@@ -5,6 +5,7 @@ import { ConflictError } from '../../../shared/common/domain-errors';
 import { UsersService } from '../../users/users.service';
 import { AuthRepository } from '../auth.repository';
 import { AuthService } from '../auth.service';
+import { MezonAuthService } from '../mezon-auth.service';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -38,6 +39,10 @@ describe('AuthService', () => {
         {
           provide: ConfigService,
           useValue: { get: jest.fn().mockReturnValue('mock-value') },
+        },
+        {
+          provide: MezonAuthService,
+          useValue: {},
         },
       ],
     }).compile();

@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { NotificationType } from '@prisma/client';
+import { NotificationType, Prisma } from '@prisma/client';
 import { buildPaginationMeta, buildPrismaSkipTake } from '../../shared/common/pagination';
 import { PrismaService } from '../../shared/database/prisma.service';
+import { GroupInviteNotificationPayload } from './notifications.service';
 
 @Injectable()
 export class NotificationsRepository {
@@ -17,7 +18,15 @@ export class NotificationsRepository {
       }),
       this.prisma.notification.count({ where }),
     ]);
-    return { data, meta: buildPaginationMeta(total, page, limit) };
+    return {
+      data: data.map((item) => {
+        return {
+          ...item,
+          data: item.data as GroupInviteNotificationPayload,
+        };
+      }),
+      meta: buildPaginationMeta(total, page, limit),
+    };
   }
 
   async create(data: {
@@ -40,9 +49,16 @@ export class NotificationsRepository {
       type: NotificationType;
       title: string;
       body: string;
+      data?: Record<string, unknown>;
     }[],
   ) {
-    return this.prisma.notification.createMany({ data: notifications });
+    return this.prisma.$transaction(
+      notifications.map((n) =>
+        this.prisma.notification.create({
+          data: { ...n, data: n.data as object | undefined },
+        }),
+      ),
+    );
   }
 
   async markAsRead(id: string, userId: string) {
@@ -61,5 +77,32 @@ export class NotificationsRepository {
 
   async getUnreadCount(userId: string): Promise<number> {
     return this.prisma.notification.count({ where: { userId, isRead: false } });
+  }
+
+  async updatePayload(id: string, payload: Prisma.InputJsonObject) {
+    return this.prisma.notification.update({
+      where: { id },
+      data: { data: payload },
+    });
+  }
+
+  async updateInviteStatusByToken(userId: string, token: string, status: 'ACCEPTED' | 'REJECTED') {
+    const notifications = await this.prisma.notification.findMany({
+      where: {
+        userId,
+        type: NotificationType.GROUP_INVITE,
+        data: { path: ['token'], equals: token },
+      },
+    });
+
+    for (const notif of notifications) {
+      const payload = notif.data as Record<string, unknown>;
+      if (payload) {
+        await this.prisma.notification.update({
+          where: { id: notif.id },
+          data: { data: { ...payload, status } },
+        });
+      }
+    }
   }
 }
