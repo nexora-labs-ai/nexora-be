@@ -1,6 +1,7 @@
 import { BadGatewayException, BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Recommendation, RecommendationType } from '@prisma/client';
 import { z } from 'zod';
+import { GoogleMapsUrlSchema, HttpsUrlSchema } from '../../../shared/common/validators/url.schemas';
 import { PrismaService } from '../../../shared/database/prisma.service';
 import { GeminiService } from '../providers/gemini.service';
 
@@ -13,45 +14,31 @@ const ExpenseRecommendationSchema = z.object({
 
 const ExpenseRecommendationsArraySchema = z.array(ExpenseRecommendationSchema).min(3).max(5);
 
-const BudgetAnalysisSuccessSchema = z.object({
-  summary: z.string().min(1),
-  trends: z.string().min(1),
-  topCategories: z.array(z.string()),
-  savingOpportunities: z.string().min(1),
-  projectedMonthlySpend: z.coerce.number().nonnegative(),
-});
+const BudgetAnalysisDataSchema = z
+  .object({
+    summary: z.string().trim().min(1),
+    trends: z.string().trim().min(1),
+    topCategories: z.array(z.string().trim().min(1)).min(1),
+    savingOpportunities: z.string().trim().min(1),
+    projectedMonthlySpend: z.number().finite().nonnegative(),
+  })
+  .strict();
 
-const BudgetAnalysisErrorSchema = z.object({
-  error: z.string().min(1),
-});
-
-const BudgetAnalysisSchema = z.union([BudgetAnalysisSuccessSchema, BudgetAnalysisErrorSchema]);
-export type BudgetAnalysisResponse = z.infer<typeof BudgetAnalysisSchema>;
-
-const HttpUrlSchema = z
-  .string()
-  .url()
-  .refine((value) => {
-    const url = new URL(value);
-    return url.protocol === 'https:' || url.protocol === 'http:';
-  }, 'URL must use HTTP or HTTPS');
-
-const ALLOWED_MAP_HOSTS = new Set([
-  'google.com',
-  'www.google.com',
-  'maps.google.com',
-  'maps.app.goo.gl',
+const BudgetAnalysisSchema = z.discriminatedUnion('status', [
+  z
+    .object({
+      status: z.literal('success'),
+      data: BudgetAnalysisDataSchema,
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal('error'),
+      message: z.string().trim().min(1),
+    })
+    .strict(),
 ]);
-
-const GoogleMapsUrlSchema = z
-  .string()
-  .url()
-  .refine((value) => {
-    const url = new URL(value);
-    if (url.protocol !== 'https:') return false;
-    const hostname = url.hostname.toLowerCase();
-    return ALLOWED_MAP_HOSTS.has(hostname) || hostname.endsWith('.google.com');
-  }, 'Invalid Google Maps URL');
+export type BudgetAnalysisResponse = z.infer<typeof BudgetAnalysisSchema>;
 
 const AiRecommendationItemSchema = z.object({
   type: z.nativeEnum(RecommendationType),
@@ -61,7 +48,7 @@ const AiRecommendationItemSchema = z.object({
   priceRange: z.string().trim().min(1).max(100),
   rating: z.coerce.number().min(0).max(5),
   aiReason: z.string().trim().min(1).max(2000),
-  imageUrl: HttpUrlSchema,
+  imageUrl: HttpsUrlSchema,
   googleMapsUrl: GoogleMapsUrlSchema,
 });
 
@@ -175,23 +162,40 @@ Return only valid JSON.`;
       take: 100,
     });
 
+    if (expenses.length === 0) {
+      return { status: 'error', message: 'Not enough expense data' };
+    }
+
     const prompt = `
 Analyze these expenses and return a budget analysis in JSON:
 ${JSON.stringify(expenses.map((e) => ({ amount: e.amount, category: e.category?.name, date: e.date })))}
 
-Return JSON with: { summary, trends, topCategories, savingOpportunities, projectedMonthlySpend }`;
+Return exactly one JSON object:
+{
+  "status": "success",
+  "data": {
+    "summary": "Non-empty summary",
+    "trends": "Non-empty spending trends",
+    "topCategories": ["At least one category"],
+    "savingOpportunities": "Non-empty actionable suggestions",
+    "projectedMonthlySpend": 1000
+  }
+}
 
-    try {
-      const raw = await this.geminiService.generateJsonContent(prompt);
-      const parsed = BudgetAnalysisSchema.safeParse(raw);
-      if (!parsed.success) {
-        throw new SyntaxError('Invalid AI budget analysis format');
-      }
-      return parsed.data;
-    } catch (e) {
-      this.logger.error('Analysis failed', e);
-      return { error: 'Analysis failed' };
+If the data cannot be analyzed, return:
+{
+  "status": "error",
+  "message": "Non-empty reason"
+}`;
+
+    const raw = await this.geminiService.generateJsonContent<unknown>(prompt);
+    const parsed = BudgetAnalysisSchema.safeParse(raw);
+    if (!parsed.success) {
+      this.logger.error('Failed to parse AI budget analysis response', parsed.error);
+      throw new BadGatewayException('AI returned an invalid budget analysis');
     }
+
+    return parsed.data;
   }
 
   async generatePlacesRecommendations(
@@ -220,7 +224,7 @@ Otherwise, provide a friendly intro message and the recommendations in a structu
 - priceRange: Estimated price (e.g. 100k - 200k VND)
 - rating: Random rating between 3.5 and 5.0
 - aiReason: A detailed explanation of why this place matches the request.
-- imageUrl: Provide a generic placeholder image URL related to the place type (e.g., from Unsplash source or a mock URL).
+- imageUrl: Provide an HTTPS image URL related to the place type.
 - googleMapsUrl: A valid Google Maps search URL for this place (e.g., "https://www.google.com/maps/search/?api=1&query=Place+Name")
   ]
 }

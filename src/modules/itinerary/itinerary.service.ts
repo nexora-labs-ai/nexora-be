@@ -1,6 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { ItineraryStatus, Prisma } from '@prisma/client';
 import { BusinessRuleError, NotFoundError } from '../../shared/common/domain-errors';
+import {
+  addUtcDays,
+  getInclusiveUtcDayCount,
+  parseUtcDateOnly,
+  toUtcDateOnly,
+} from '../../shared/common/utils/date-only.utils';
 import { PrismaService } from '../../shared/database/prisma.service';
 import {
   AiItineraryItem,
@@ -54,16 +60,15 @@ export class ItineraryService {
     let endDate: Date;
 
     if (dto.startDate && dto.endDate) {
-      startDate = new Date(`${dto.startDate}T00:00:00.000Z`);
-      endDate = new Date(`${dto.endDate}T00:00:00.000Z`);
+      try {
+        startDate = parseUtcDateOnly(dto.startDate);
+        endDate = parseUtcDateOnly(dto.endDate);
+      } catch {
+        throw new BusinessRuleError('Invalid itinerary date range');
+      }
     } else {
-      const now = new Date();
-      const year = now.getUTCFullYear();
-      const month = String(now.getUTCMonth() + 1).padStart(2, '0');
-      const date = String(now.getUTCDate()).padStart(2, '0');
-
-      startDate = new Date(`${year}-${month}-${date}T00:00:00.000Z`);
-      endDate = new Date(startDate.getTime() + 24 * 60 * 60 * 1000);
+      startDate = toUtcDateOnly(new Date());
+      endDate = addUtcDays(startDate, 1);
     }
 
     if (startDate.getTime() >= endDate.getTime()) {
@@ -100,10 +105,8 @@ export class ItineraryService {
 
     if (!group) throw new NotFoundError('Group', groupId);
 
-    const start = group.startDate ? new Date(group.startDate) : new Date();
-    const end = group.endDate
-      ? new Date(group.endDate)
-      : new Date(start.getTime() + 3 * 24 * 3600 * 1000); // 3 days fallback
+    const start = toUtcDateOnly(group.startDate ?? new Date());
+    const end = group.endDate ? toUtcDateOnly(group.endDate) : addUtcDays(start, 2);
 
     if (start.getTime() >= end.getTime()) {
       throw new BusinessRuleError(
@@ -111,7 +114,7 @@ export class ItineraryService {
       );
     }
 
-    const duration = Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) + 1;
+    const duration = getInclusiveUtcDayCount(start, end);
 
     let finalBudget = params.budget;
     if (finalBudget === undefined || finalBudget === null) {
@@ -336,12 +339,12 @@ export class ItineraryService {
 
       await tx.itineraryItem.createMany({
         data: newItems.map((aiItem: AiItineraryItem) => {
-          const startDate = itinerary.startDate ? new Date(itinerary.startDate) : new Date();
           const { startTime, endTime } = buildAiItemDates(
-            startDate,
-            aiItem.day || 1,
-            aiItem.startTime || '09:00',
-            aiItem.endTime || '11:00',
+            itinerary.startDate,
+            itinerary.endDate,
+            aiItem.day,
+            aiItem.startTime,
+            aiItem.endTime,
           );
 
           return {
@@ -355,7 +358,7 @@ export class ItineraryService {
             travelTime: aiItem.travelTime,
             imageUrl: aiItem.imageUrl,
             googleMapsUrl: aiItem.googleMapsUrl,
-            orderNo: (aiItem.order || 1) + ((aiItem.day || 1) - 1) * 100,
+            orderNo: aiItem.order + (aiItem.day - 1) * 100,
           };
         }),
       });
@@ -383,12 +386,12 @@ export class ItineraryService {
 
       await tx.itineraryItem.createMany({
         data: newItems.map((item: AiItineraryItem) => {
-          const startDate = itinerary.startDate ? new Date(itinerary.startDate) : new Date();
           const { startTime, endTime } = buildAiItemDates(
-            startDate,
-            item.day || 1,
-            item.startTime || '09:00',
-            item.endTime || '11:00',
+            itinerary.startDate,
+            itinerary.endDate,
+            item.day,
+            item.startTime,
+            item.endTime,
           );
 
           return {
@@ -402,7 +405,7 @@ export class ItineraryService {
             travelTime: item.travelTime,
             imageUrl: item.imageUrl,
             googleMapsUrl: item.googleMapsUrl,
-            orderNo: (item.order || 1) + ((item.day || 1) - 1) * 100,
+            orderNo: item.order + (item.day - 1) * 100,
           };
         }),
       });

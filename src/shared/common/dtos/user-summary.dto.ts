@@ -1,14 +1,14 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class UserProfileDto {
   @ApiProperty()
   userId: string;
 
-  @ApiPropertyOptional()
-  displayName?: string;
+  @ApiProperty()
+  displayName: string;
 
-  @ApiPropertyOptional({ type: String, nullable: true })
-  avatarUrl?: string | null;
+  @ApiProperty({ type: String, nullable: true })
+  avatarUrl: string | null;
 }
 
 export class UserSummaryDto {
@@ -21,6 +21,6 @@ export class UserSummaryDto {
   @ApiProperty()
   status: string;
 
-  @ApiPropertyOptional({ type: UserProfileDto, nullable: true })
-  profile?: UserProfileDto | null;
+  @ApiProperty({ type: UserProfileDto, nullable: true })
+  profile: UserProfileDto | null;
 }
