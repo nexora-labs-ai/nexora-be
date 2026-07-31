@@ -1,0 +1,171 @@
+name: Mezon Notifications
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review, converted_to_draft, closed]
+  pull_request_review:
+    types: [submitted, dismissed]
+  release:
+    types: [published]
+  deployment_status:
+  workflow_run:
+    workflows: [Backend CI, Release]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    name: Notify Mezon
+    if: >-
+      github.event_name != 'deployment_status' ||
+      contains(fromJSON('["success","failure","error","inactive"]'), github.event.deployment_status.state)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      MEZON_WEBHOOK_URL: ${{ secrets.MEZON_WEBHOOK_URL }}
+      EVENT_NAME: ${{ github.event_name }}
+      EVENT_ACTION: ${{ github.event.action }}
+      REPOSITORY: ${{ github.repository }}
+      ACTOR: ${{ github.actor }}
+      SERVER_URL: ${{ github.server_url }}
+      RUN_ID: ${{ github.run_id }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      PR_TITLE: ${{ github.event.pull_request.title }}
+      PR_URL: ${{ github.event.pull_request.html_url }}
+      PR_HEAD: ${{ github.event.pull_request.head.ref }}
+      PR_BASE: ${{ github.event.pull_request.base.ref }}
+      PR_DRAFT: ${{ github.event.pull_request.draft }}
+      PR_MERGED: ${{ github.event.pull_request.merged }}
+      REVIEW_STATE: ${{ github.event.review.state }}
+      REVIEWER: ${{ github.event.review.user.login }}
+      RELEASE_NAME: ${{ github.event.release.name }}
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
+      RELEASE_URL: ${{ github.event.release.html_url }}
+      WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+      WORKFLOW_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+      WORKFLOW_URL: ${{ github.event.workflow_run.html_url }}
+      WORKFLOW_BRANCH: ${{ github.event.workflow_run.head_branch }}
+      WORKFLOW_RUN_NUMBER: ${{ github.event.workflow_run.run_number }}
+      DEPLOY_ENVIRONMENT: ${{ github.event.deployment.environment }}
+      DEPLOY_STATE: ${{ github.event.deployment_status.state }}
+      DEPLOY_URL: ${{ github.event.deployment_status.environment_url || github.event.deployment_status.target_url }}
+    steps:
+      - name: Skip when webhook secret is unavailable
+        if: env.MEZON_WEBHOOK_URL == ''
+        run: echo "::notice::MEZON_WEBHOOK_URL is not configured or is unavailable for this event."
+
+      - name: Build and send notification
+        if: env.MEZON_WEBHOOK_URL != ''
+        continue-on-error: true
+        shell: bash
+        run: |
+          case "${EVENT_NAME}" in
+            pull_request)
+              case "${EVENT_ACTION}" in
+                opened)
+                  headline="🆕 Pull request #${PR_NUMBER} was opened"
+                  ;;
+                reopened)
+                  headline="🔁 Pull request #${PR_NUMBER} was reopened"
+                  ;;
+                ready_for_review)
+                  headline="👀 Pull request #${PR_NUMBER} is ready for review"
+                  ;;
+                converted_to_draft)
+                  headline="📝 Pull request #${PR_NUMBER} was converted to draft"
+                  ;;
+                closed)
+                  if [ "${PR_MERGED}" = "true" ]; then
+                    headline="✅ Pull request #${PR_NUMBER} was merged"
+                  else
+                    headline="🚫 Pull request #${PR_NUMBER} was closed"
+                  fi
+                  ;;
+                *)
+                  headline="Pull request #${PR_NUMBER}: ${EVENT_ACTION}"
+                  ;;
+              esac
+              printf -v message '%s\n%s\n%s -> %s\nBy: %s\n%s' \
+                "${headline}" "${PR_TITLE}" "${PR_HEAD}" "${PR_BASE}" "${ACTOR}" "${PR_URL}"
+              ;;
+            pull_request_review)
+              case "${REVIEW_STATE}" in
+                approved)
+                  headline="✅ Review approved on PR #${PR_NUMBER}"
+                  ;;
+                changes_requested)
+                  headline="🔴 Changes requested on PR #${PR_NUMBER}"
+                  ;;
+                commented)
+                  headline="💬 Review submitted on PR #${PR_NUMBER}"
+                  ;;
+                dismissed)
+                  headline="↩️ Review dismissed on PR #${PR_NUMBER}"
+                  ;;
+                *)
+                  headline="Review ${REVIEW_STATE} on PR #${PR_NUMBER}"
+                  ;;
+              esac
+              printf -v message '%s\n%s\nReviewer: %s\n%s' \
+                "${headline}" "${PR_TITLE}" "${REVIEWER}" "${PR_URL}"
+              ;;
+            release)
+              printf -v message '🚀 Release %s was published\n%s\nBy: %s\n%s' \
+                "${RELEASE_TAG}" "${RELEASE_NAME}" "${ACTOR}" "${RELEASE_URL}"
+              ;;
+            workflow_run)
+              case "${WORKFLOW_CONCLUSION}" in
+                success)
+                  icon="✅"
+                  ;;
+                failure|timed_out)
+                  icon="🔴"
+                  ;;
+                cancelled)
+                  icon="⚪"
+                  ;;
+                *)
+                  icon="🟡"
+                  ;;
+              esac
+              printf -v message '%s %s #%s: %s\nBranch: %s\n%s' \
+                "${icon}" "${WORKFLOW_NAME}" "${WORKFLOW_RUN_NUMBER}" \
+                "${WORKFLOW_CONCLUSION}" "${WORKFLOW_BRANCH}" "${WORKFLOW_URL}"
+              ;;
+            deployment_status)
+              case "${DEPLOY_STATE}" in
+                success)
+                  icon="✅"
+                  ;;
+                failure|error)
+                  icon="🔴"
+                  ;;
+                *)
+                  icon="⚪"
+                  ;;
+              esac
+              printf -v message '%s Deployment %s\nEnvironment: %s\nBy: %s\n%s' \
+                "${icon}" "${DEPLOY_STATE}" "${DEPLOY_ENVIRONMENT}" "${ACTOR}" "${DEPLOY_URL}"
+              ;;
+            *)
+              printf -v message 'ℹ️ %s: %s/%s\nBy: %s\n%s/%s/actions/runs/%s' \
+                "${REPOSITORY}" "${EVENT_NAME}" "${EVENT_ACTION}" "${ACTOR}" \
+                "${SERVER_URL}" "${REPOSITORY}" "${RUN_ID}"
+              ;;
+          esac
+
+          payload="$(jq -n --arg text "${message}" '{type: "hook", message: {t: $text}}')"
+
+          curl \
+            --fail-with-body \
+            --silent \
+            --show-error \
+            --retry 3 \
+            --retry-all-errors \
+            --connect-timeout 10 \
+            --max-time 30 \
+            --header 'Content-Type: application/json' \
+            --data "${payload}" \
+            "${MEZON_WEBHOOK_URL}"
