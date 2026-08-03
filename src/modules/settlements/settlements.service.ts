@@ -85,16 +85,21 @@ export class SettlementsService {
     return settlement;
   }
 
-  async remindSettlement(
-    groupId: string,
-    fromUserId: string,
-    targetUserId: string,
-    amount: number,
-  ) {
-    await this.groupsService.getGroup(groupId, fromUserId);
+  async remindSettlement(groupId: string, fromUserId: string, targetUserId: string) {
+    const group = await this.groupsService.getGroup(groupId, fromUserId);
+
+    if (!group.members.some((m) => m.userId === targetUserId)) {
+      throw new NotFoundError('GroupMember', targetUserId);
+    }
 
     if (fromUserId === targetUserId) {
       throw new BusinessRuleError('Cannot remind yourself');
+    }
+
+    const debts = await this.getOptimizedSettlements(groupId, fromUserId);
+    const debt = debts.find((d) => d.fromUserId === targetUserId && d.toUserId === fromUserId);
+    if (!debt || debt.amount <= 0) {
+      throw new BusinessRuleError('This member does not owe you anything');
     }
 
     const cacheKey = `settlement:remind:${groupId}:${fromUserId}:${targetUserId}`;
@@ -110,10 +115,11 @@ export class SettlementsService {
       groupId,
       fromUserId,
       targetUserId,
-      amount,
+      amount: debt.amount,
+      currency: group.currency,
     });
 
-    return { success: true };
+    return { success: true, amount: debt.amount };
   }
 
   async completeSettlement(id: string, requestingUserId: string) {

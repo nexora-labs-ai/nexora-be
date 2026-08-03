@@ -129,6 +129,7 @@ export class NotificationsService {
     fromUserId: string;
     targetUserId: string;
     amount: number;
+    currency: string;
   }) {
     try {
       const reminder = event;
@@ -137,7 +138,7 @@ export class NotificationsService {
         groupId: reminder.groupId,
         type: NotificationType.SETTLEMENT_REQUESTED,
         title: 'Settlement Reminder',
-        body: `You have been reminded to settle an amount of ${reminder.amount}`,
+        body: `You have been reminded to settle an amount of ${reminder.amount} ${reminder.currency}`,
       });
     } catch (error) {
       this.logger.error(

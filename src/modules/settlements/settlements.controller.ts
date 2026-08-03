@@ -60,12 +60,7 @@ export class SettlementsController {
   @Post('remind')
   @ApiOperation({ summary: 'Remind a user to settle their debt' })
   remind(@CurrentUser('id') userId: string, @Body() dto: RemindSettlementDto) {
-    return this.settlementsService.remindSettlement(
-      dto.groupId,
-      userId,
-      dto.targetUserId,
-      dto.amount,
-    );
+    return this.settlementsService.remindSettlement(dto.groupId, userId, dto.targetUserId);
   }
 
   @Patch(':id/complete')

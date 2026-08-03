@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNumber, IsUUID, Min } from 'class-validator';
+import { IsUUID } from 'class-validator';
 
 export class RemindSettlementDto {
   @ApiProperty()
@@ -9,9 +9,4 @@ export class RemindSettlementDto {
   @ApiProperty()
   @IsUUID()
   targetUserId: string;
-
-  @ApiProperty()
-  @IsNumber()
-  @Min(0.01)
-  amount: number;
 }
