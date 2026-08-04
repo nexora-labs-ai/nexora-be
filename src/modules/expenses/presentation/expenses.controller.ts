@@ -75,7 +75,13 @@ export class ExpensesController {
   }
 
   @Post('analyze-receipt')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+      fileFilter: (_req, f, cb) =>
+        cb(null, ['image/jpeg', 'image/png', 'image/webp'].includes(f.mimetype)),
+    }),
+  )
   @ApiOperation({ summary: 'Analyze receipt image to extract data' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -89,7 +95,9 @@ export class ExpensesController {
       },
     },
   })
-  analyzeReceipt(@UploadedFile() file: Express.Multer.File) {
+  analyzeReceipt(
+    @UploadedFile(new ParseFilePipe({ fileIsRequired: true })) file: Express.Multer.File,
+  ) {
     return this.expensesService.analyzeReceipt(file);
   }
 
