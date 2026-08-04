@@ -45,6 +45,8 @@ export class CacheService {
     expense: (id: string) => `expense:${id}`,
     groupExpenses: (groupId: string) => `group:${groupId}:expenses`,
     settlement: (groupId: string) => `group:${groupId}:settlement`,
+    settlementRemind: (groupId: string, fromUserId: string, toUserId: string) =>
+      `settlement:remind:${groupId}:${fromUserId}:${toUserId}`,
     notifications: (userId: string) => `notifications:${userId}`,
     recommendation: (groupId: string) => `recommendation:${groupId}`,
   };

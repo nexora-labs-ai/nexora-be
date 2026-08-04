@@ -85,15 +85,6 @@ export class SettlementsService {
       throw new BusinessRuleError('Cannot settle with yourself');
     }
 
-    const existing = await this.settlementsRepository.findPendingBetween(
-      groupId,
-      fromUserId,
-      toUserId,
-    );
-    if (existing) {
-      throw new ConflictError('A pending settlement already exists between these members');
-    }
-
     const settlement = await this.settlementsRepository.create({
       groupId,
       fromUserId,
@@ -176,8 +167,16 @@ export class SettlementsService {
     await this.cacheService.del(CacheService.keys.settlement(settlement.groupId!));
 
     // Clear remind rate limit so creditor can remind again immediately if they rejected
-    const remindCacheKey = `settlement:remind:${settlement.groupId}:${settlement.toUserId}:${settlement.fromUserId}`;
-    await this.cacheService.del(remindCacheKey);
+    const cancelledByCreditor = settlement.toUserId === requestingUserId;
+    if (cancelledByCreditor) {
+      await this.cacheService.del(
+        CacheService.keys.settlementRemind(
+          settlement.groupId!,
+          settlement.toUserId!,
+          settlement.fromUserId!,
+        ),
+      );
+    }
 
     return cancelled;
   }
