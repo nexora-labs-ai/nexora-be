@@ -36,7 +36,7 @@ export class CloudinaryAdapter implements StoragePort {
           folder: 'nexora',
           resource_type: 'image',
           overwrite: true,
-          timeout: 60_000,
+          timeout: 30_000,
         },
         (error: UploadApiErrorResponse | undefined, result: UploadApiResponse | undefined) => {
           if (error) {
