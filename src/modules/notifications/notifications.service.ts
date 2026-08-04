@@ -130,15 +130,18 @@ export class NotificationsService {
     targetUserId: string;
     amount: number;
     currency: string;
+    fromUserName: string;
+    groupName: string;
   }) {
     try {
       const reminder = event;
       await this.sendToUser({
         userId: reminder.targetUserId,
         groupId: reminder.groupId,
-        type: NotificationType.SETTLEMENT_REQUESTED,
+        type: NotificationType.SETTLEMENT_REMINDER,
         title: 'Settlement Reminder',
-        body: `You have been reminded to settle an amount of ${reminder.amount} ${reminder.currency}`,
+        body: `${reminder.fromUserName} reminded you to settle ${reminder.currency} ${reminder.amount.toLocaleString()} in the group ${reminder.groupName}`,
+        payload: { groupId: reminder.groupId, fromUserId: reminder.fromUserId, kind: 'REMINDER' },
       });
     } catch (error) {
       this.logger.error(

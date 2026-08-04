@@ -132,6 +132,10 @@ export class SettlementsService {
       targetUserId,
       amount: debt.amount,
       currency: group.currency,
+      fromUserName:
+        group.members.find((m) => m.userId === fromUserId)?.user?.profile?.displayName ||
+        'A member',
+      groupName: group.name,
     });
 
     return { success: true, amount: debt.amount };

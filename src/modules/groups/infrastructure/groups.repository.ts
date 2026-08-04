@@ -251,7 +251,7 @@ export class GroupsRepository {
         },
       });
 
-      return { fund: updatedFund, transaction };
+      return { fund, transaction };
     });
   }
 
