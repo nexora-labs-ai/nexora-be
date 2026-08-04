@@ -27,6 +27,12 @@ export class SettlementsRepository {
     });
   }
 
+  async findPendingBetween(groupId: string, fromUserId: string, toUserId: string) {
+    return this.prisma.settlement.findFirst({
+      where: { groupId, fromUserId, toUserId, status: 'PENDING' },
+    });
+  }
+
   async create(data: {
     groupId: string;
     fromUserId: string;

@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   BusinessRuleError,
+  ConflictError,
   ForbiddenError,
   NotFoundError,
 } from '../../shared/common/domain-errors';
@@ -53,7 +54,21 @@ export class SettlementsService {
     // 1. Simplify based on TRUE balances (excluding pending)
     const optimized = DebtSimplifier.simplify(numericBalances);
 
-    return optimized;
+    const pendingByPair = new Map<string, number>();
+    for (const s of groupSettlements.filter((s) => s.status === 'PENDING')) {
+      const k = `${s.fromUserId}:${s.toUserId}`;
+      pendingByPair.set(k, (pendingByPair.get(k) ?? 0) + Number(s.amount));
+    }
+
+    return optimized.map((o) => {
+      const pendingAmount = pendingByPair.get(`${o.fromUserId}:${o.toUserId}`) ?? 0;
+      return {
+        ...o,
+        amount: o.amount,
+        pendingAmount,
+        remainingAmount: Math.max(o.amount - pendingAmount, 0),
+      };
+    });
   }
 
   async requestSettlement(
@@ -68,6 +83,15 @@ export class SettlementsService {
 
     if (fromUserId === toUserId) {
       throw new BusinessRuleError('Cannot settle with yourself');
+    }
+
+    const existing = await this.settlementsRepository.findPendingBetween(
+      groupId,
+      fromUserId,
+      toUserId,
+    );
+    if (existing) {
+      throw new ConflictError('A pending settlement already exists between these members');
     }
 
     const settlement = await this.settlementsRepository.create({

@@ -82,6 +82,11 @@ export class ExpensesService {
     // Determine splits
     let splits: { userId: string; amount: number; shares?: number }[];
 
+    if (dto.fundingSource === 'GROUP_FUND') {
+      dto.splitType = ExpenseSplitType.SHARES;
+      dto.splits = [];
+    }
+
     if (dto.splitType === ExpenseSplitType.SHARES && !dto.splits?.length) {
       // Auto-split equally among all members by giving 1 share
       const participants = group.members.map((m) => ({ userId: m.userId, shares: 1 }));
@@ -159,12 +164,25 @@ export class ExpensesService {
     const total = Money.of(amount, currency);
 
     // If amount, splitType, or splits change, recalculate
-    if (dto.amount !== undefined || dto.splitType !== undefined || dto.splits !== undefined) {
+    if (
+      dto.amount !== undefined ||
+      dto.splitType !== undefined ||
+      dto.splits !== undefined ||
+      dto.fundingSource === 'GROUP_FUND' ||
+      expense.fundingSource === 'GROUP_FUND'
+    ) {
       const group = await this.groupsService.getGroup(expense.groupId!, requestingUserId);
       const allowedUserIds = new Set(group.members.map((m) => m.userId));
 
       let oldSplits: { userId: string; amount: number | string | any; shares?: number | null }[] =
         [];
+
+      const newFundingSource = dto.fundingSource ?? expense.fundingSource;
+      if (newFundingSource === 'GROUP_FUND') {
+        dto.splitType = ExpenseSplitType.SHARES;
+        dto.splits = [];
+      }
+
       if (!dto.splits?.length) {
         oldSplits = await this.expensesRepository.findSplitsByExpenseId(id);
       }
