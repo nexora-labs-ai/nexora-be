@@ -272,7 +272,7 @@ export class ExpensesService {
 
   async analyzeReceipt(file: Express.Multer.File) {
     if (!file) {
-      throw new Error('No receipt image provided');
+      throw new BusinessRuleError('No receipt image provided');
     }
 
     const prompt = `
@@ -285,30 +285,33 @@ export class ExpensesService {
       Return the result ONLY as a raw JSON object with the keys: amount, date, merchant, category. Do not include markdown code blocks.
     `;
 
+    let result: { amount: number; date: string; merchant: string; category: string };
     try {
-      const result = await this.geminiService.analyzeImageWithPrompt<{
+      result = await this.geminiService.analyzeImageWithPrompt<{
         amount: number;
         date: string;
         merchant: string;
         category: string;
       }>(file.buffer, file.mimetype, prompt);
-
-      const categories = await this.getCategories();
-      const matchedCategory = categories.find(
-        (c) => c.name.toLowerCase() === result.category.toLowerCase(),
-      );
-
-      const uploadResponse = await this.uploadReceiptEvidence(file);
-
-      return {
-        ...result,
-        categoryId: matchedCategory?.id,
-        receiptUrl: uploadResponse.receiptUrl,
-      };
     } catch (error) {
-      this.logger.error('Failed to analyze receipt', error);
-      throw new Error('Failed to analyze receipt image');
+      this.logger.error('Gemini receipt analysis failed', error);
+      throw new BusinessRuleError('Failed to analyze receipt image');
     }
+
+    const [categories, upload] = await Promise.all([
+      this.getCategories(),
+      this.uploadReceiptEvidence(file).catch((e) => {
+        this.logger.warn(`Receipt upload failed, returning analysis only: ${e.message}`);
+        return { receiptUrl: undefined };
+      }),
+    ]);
+
+    return {
+      ...result,
+      categoryId: categories.find((c) => c.name.toLowerCase() === result.category.toLowerCase())
+        ?.id,
+      receiptUrl: upload.receiptUrl,
+    };
   }
 
   async uploadReceiptEvidence(file: Express.Multer.File) {
