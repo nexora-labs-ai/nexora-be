@@ -1,7 +1,12 @@
+import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ExpenseSplitType, GroupRole } from '@prisma/client';
-import { ForbiddenError, NotFoundError } from '../../../shared/common/domain-errors';
+import {
+  BusinessRuleError,
+  ForbiddenError,
+  NotFoundError,
+} from '../../../shared/common/domain-errors';
 import { Money } from '../../../shared/common/value-objects/money';
 import { CacheService } from '../../../shared/infrastructure/cache/cache.service';
 import { STORAGE_PORT, StoragePort } from '../../../shared/infrastructure/ports/storage.port';
@@ -308,10 +313,15 @@ export class ExpensesService {
 
   async uploadReceiptEvidence(file: Express.Multer.File) {
     if (!file) {
-      throw new Error('No receipt image provided');
+      throw new BusinessRuleError('No receipt image provided');
     }
+
+    const ext = (file.originalname.split('.').pop() || 'jpg')
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '');
+
     const uploadResponse = await this.storage.upload({
-      key: `receipts/${Date.now()}-${file.originalname}`,
+      key: `receipts/${randomUUID()}.${ext}`,
       buffer: file.buffer,
       mimeType: file.mimetype,
     });

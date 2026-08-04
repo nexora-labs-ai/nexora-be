@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  ParseFilePipe,
   ParseUUIDPipe,
   Post,
   Put,
@@ -93,7 +94,13 @@ export class ExpensesController {
   }
 
   @Post('upload-receipt')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+      fileFilter: (_req, f, cb) =>
+        cb(null, ['image/jpeg', 'image/png', 'image/webp'].includes(f.mimetype)),
+    }),
+  )
   @ApiOperation({ summary: 'Upload receipt image as evidence' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -107,7 +114,9 @@ export class ExpensesController {
       },
     },
   })
-  uploadReceipt(@UploadedFile() file: Express.Multer.File) {
+  uploadReceipt(
+    @UploadedFile(new ParseFilePipe({ fileIsRequired: true })) file: Express.Multer.File,
+  ) {
     return this.expensesService.uploadReceiptEvidence(file);
   }
 }
