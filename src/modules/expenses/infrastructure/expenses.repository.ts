@@ -20,7 +20,11 @@ export class ExpensesRepository {
       include: {
         payers: true,
         splits: true,
-        attachments: true,
+        attachments: {
+          select: { fileUrl: true },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
       },
     });
   }
@@ -50,7 +54,11 @@ export class ExpensesRepository {
         include: {
           payers: true,
           splits: true,
-          attachments: true,
+          attachments: {
+            select: { fileUrl: true },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+          },
         },
         orderBy: { date: 'desc' },
         ...buildPrismaSkipTake(page, limit),

@@ -55,9 +55,9 @@ export class ExpensesService {
         );
         return {
           ...result,
-          data: result.data.map((exp) => ({
+          data: result.data.map(({ attachments, ...exp }) => ({
             ...exp,
-            receiptUrl: (exp as any).attachments?.[0]?.fileUrl,
+            receiptUrl: attachments[0]?.fileUrl ?? null,
           })),
         };
       },
@@ -71,9 +71,10 @@ export class ExpensesService {
 
     // Verify membership
     await this.groupsService.getGroup(expense.groupId!, requestingUserId);
+    const { attachments, ...expenseData } = expense;
     return {
-      ...expense,
-      receiptUrl: (expense as any).attachments?.[0]?.fileUrl,
+      ...expenseData,
+      receiptUrl: attachments[0]?.fileUrl ?? null,
     };
   }
 
