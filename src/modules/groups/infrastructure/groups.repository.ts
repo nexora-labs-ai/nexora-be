@@ -232,28 +232,11 @@ export class GroupsRepository {
     evidenceUrl?: string,
   ) {
     return this.prisma.$transaction(async (tx) => {
-      // 1. Get or create GroupFund
-      let fund = await tx.groupFund.findUnique({
+      // 1. Upsert GroupFund
+      const fund = await tx.groupFund.upsert({
         where: { groupId },
-      });
-
-      if (!fund) {
-        fund = await tx.groupFund.create({
-          data: {
-            groupId,
-            balance: 0,
-          },
-        });
-      }
-
-      // 2. Update balance
-      const updatedFund = await tx.groupFund.update({
-        where: { id: fund.id },
-        data: {
-          balance: {
-            increment: amount,
-          },
-        },
+        create: { groupId, balance: amount },
+        update: { balance: { increment: amount } },
       });
 
       // 3. Create FundTransaction

@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNumber, IsOptional, IsPositive, IsString } from 'class-validator';
+import { IsNumber, IsOptional, IsPositive, IsString, IsUrl, MaxLength } from 'class-validator';
 
 export class WithdrawFundDto {
   @ApiProperty({ example: 200000, description: 'Amount to withdraw/refund' })
@@ -12,8 +12,9 @@ export class WithdrawFundDto {
   @IsString()
   note?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ example: 'https://res.cloudinary.com/.../receipt.jpg' })
   @IsOptional()
-  @IsString()
+  @IsUrl({ protocols: ['https'], require_protocol: true })
+  @MaxLength(2048)
   evidenceUrl?: string;
 }
