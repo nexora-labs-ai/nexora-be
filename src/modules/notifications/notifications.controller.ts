@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Get,
   HttpCode,
@@ -6,11 +7,13 @@ import {
   Param,
   ParseUUIDPipe,
   Patch,
+  Post,
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../shared/common/decorators/current-user.decorator';
 import { PaginationQueryDto } from '../../shared/common/dtos/pagination-query.dto';
+import { UpdateDeviceTokenDto } from './dto/update-device-token.dto';
 import { NotificationsService } from './notifications.service';
 
 @ApiTags('notifications')
@@ -35,6 +38,13 @@ export class NotificationsController {
     return this.notificationsService.getUnreadCount(userId);
   }
 
+  @Patch('read-all')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Mark all notifications as read' })
+  markAllAsRead(@CurrentUser('id') userId: string) {
+    return this.notificationsService.markAllAsRead(userId);
+  }
+
   @Patch(':id/read')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Mark notification as read' })
@@ -42,10 +52,10 @@ export class NotificationsController {
     return this.notificationsService.markAsRead(id, userId);
   }
 
-  @Patch('read-all')
-  @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Mark all notifications as read' })
-  markAllAsRead(@CurrentUser('id') userId: string) {
-    return this.notificationsService.markAllAsRead(userId);
+  @Post('device-token')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Update device token for push notifications' })
+  updateDeviceToken(@CurrentUser('id') userId: string, @Body() dto: UpdateDeviceTokenDto) {
+    return this.notificationsService.updateDeviceToken(userId, dto.fcmToken);
   }
 }

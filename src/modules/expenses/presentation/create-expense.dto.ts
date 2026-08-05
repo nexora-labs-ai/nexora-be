@@ -10,6 +10,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  IsUrl,
   MaxLength,
   Min,
   ValidateNested,
@@ -82,4 +83,10 @@ export class CreateExpenseDto {
   @ValidateNested({ each: true })
   @Type(() => SplitParticipantDto)
   splits?: SplitParticipantDto[];
+
+  @ApiPropertyOptional({ example: 'https://res.cloudinary.com/.../receipt.jpg' })
+  @IsOptional()
+  @IsUrl({ protocols: ['https'], require_protocol: true })
+  @MaxLength(2048)
+  receiptUrl?: string;
 }

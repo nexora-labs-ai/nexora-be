@@ -75,6 +75,7 @@ enum NotificationType {
   EXPENSE_UPDATED
   SETTLEMENT_REQUESTED
   SETTLEMENT_COMPLETED
+  SETTLEMENT_REMINDER
   GROUP_INVITE
   RECOMMENDATION_READY
   ITINERARY_READY
@@ -152,6 +153,7 @@ model NotificationSettings {
   expenseAlert        Boolean @default(true) @map("expense_alert")
   settlementAlert     Boolean @default(true) @map("settlement_alert")
   recommendationAlert Boolean @default(true) @map("recommendation_alert")
+  fcmToken            String? @map("fcm_token")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -233,9 +235,10 @@ model GroupInvitation {
 model GroupFund {
   id        String   @id @default(uuid()) @db.Uuid
   groupId   String   @unique @map("group_id") @db.Uuid
-  balance   Decimal  @default(0) @db.Decimal(18, 2)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  balance      Decimal  @default(0) @db.Decimal(18, 2)
+  targetAmount Decimal? @map("target_amount") @db.Decimal(18, 2)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   group        Group             @relation(fields: [groupId], references: [id], onDelete: Cascade)
   transactions FundTransaction[]
@@ -249,9 +252,10 @@ model FundTransaction {
   createdBy String              @map("created_by") @db.Uuid
   expenseId String?             @map("expense_id") @db.Uuid
   type      FundTransactionType
-  amount    Decimal             @db.Decimal(18, 2)
-  note      String?
-  createdAt DateTime            @default(now()) @map("created_at")
+  amount      Decimal             @db.Decimal(18, 2)
+  note        String?
+  evidenceUrl String?             @map("evidence_url")
+  createdAt   DateTime            @default(now()) @map("created_at")
 
   fund    GroupFund @relation(fields: [fundId], references: [id], onDelete: Cascade)
   creator User      @relation("CreatedBy", fields: [createdBy], references: [id])

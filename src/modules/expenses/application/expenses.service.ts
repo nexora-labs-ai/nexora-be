@@ -1,9 +1,15 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ExpenseSplitType, GroupRole } from '@prisma/client';
-import { ForbiddenError, NotFoundError } from '../../../shared/common/domain-errors';
+import {
+  BusinessRuleError,
+  ForbiddenError,
+  NotFoundError,
+} from '../../../shared/common/domain-errors';
 import { Money } from '../../../shared/common/value-objects/money';
 import { CacheService } from '../../../shared/infrastructure/cache/cache.service';
+import { STORAGE_PORT, StoragePort } from '../../../shared/infrastructure/ports/storage.port';
 import { RealtimeService } from '../../../shared/realtime/realtime.service';
 import { GeminiService } from '../../ai/providers/gemini.service';
 import { GroupsService } from '../../groups/application/groups.service';
@@ -24,6 +30,7 @@ export class ExpensesService {
     private readonly realtimeService: RealtimeService,
     private readonly eventEmitter: EventEmitter2,
     private readonly geminiService: GeminiService,
+    @Inject(STORAGE_PORT) private readonly storage: StoragePort,
   ) {}
 
   async getGroupExpenses(
@@ -39,7 +46,21 @@ export class ExpensesService {
     const filterKey = `${filters?.categoryId ?? '_'}:${filters?.payerId ?? '_'}`;
     return this.cacheService.getOrSet(
       `${CacheService.keys.groupExpenses(groupId)}:${page}:${limit}:${filterKey}`,
-      () => this.expensesRepository.findGroupExpenses(groupId, page, limit, filters),
+      async () => {
+        const result = await this.expensesRepository.findGroupExpenses(
+          groupId,
+          page,
+          limit,
+          filters,
+        );
+        return {
+          ...result,
+          data: result.data.map(({ attachments, ...exp }) => ({
+            ...exp,
+            receiptUrl: attachments[0]?.fileUrl ?? null,
+          })),
+        };
+      },
       60, // 1 minute cache
     );
   }
@@ -50,7 +71,11 @@ export class ExpensesService {
 
     // Verify membership
     await this.groupsService.getGroup(expense.groupId!, requestingUserId);
-    return expense;
+    const { attachments, ...expenseData } = expense;
+    return {
+      ...expenseData,
+      receiptUrl: attachments[0]?.fileUrl ?? null,
+    };
   }
 
   async createExpense(dto: CreateExpenseDto, payerId: string) {
@@ -62,6 +87,11 @@ export class ExpensesService {
 
     // Determine splits
     let splits: { userId: string; amount: number; shares?: number }[];
+
+    if (dto.fundingSource === 'GROUP_FUND') {
+      dto.splitType = ExpenseSplitType.SHARES;
+      dto.splits = [];
+    }
 
     if (dto.splitType === ExpenseSplitType.SHARES && !dto.splits?.length) {
       // Auto-split equally among all members by giving 1 share
@@ -88,6 +118,7 @@ export class ExpensesService {
           })(),
         fundingSource: dto.fundingSource,
         date: dto.date ? new Date(dto.date) : undefined,
+        receiptUrl: dto.receiptUrl,
       },
       splits,
     );
@@ -135,33 +166,49 @@ export class ExpensesService {
 
     const amount = dto.amount ?? Number(expense.amount);
     const currency = dto.currency ?? expense.currency ?? 'USD';
-    const splitType = dto.splitType ?? expense.splitType!;
+    let splitType = dto.splitType ?? expense.splitType!;
     const total = Money.of(amount, currency);
 
     // If amount, splitType, or splits change, recalculate
-    if (dto.amount !== undefined || dto.splitType !== undefined || dto.splits !== undefined) {
+    if (
+      dto.amount !== undefined ||
+      dto.splitType !== undefined ||
+      dto.splits !== undefined ||
+      dto.fundingSource === 'GROUP_FUND' ||
+      expense.fundingSource === 'GROUP_FUND'
+    ) {
       const group = await this.groupsService.getGroup(expense.groupId!, requestingUserId);
       const allowedUserIds = new Set(group.members.map((m) => m.userId));
 
       let oldSplits: { userId: string; amount: number | string | any; shares?: number | null }[] =
         [];
-      if (!dto.splits?.length) {
+
+      const newFundingSource = dto.fundingSource ?? expense.fundingSource;
+      if (newFundingSource === 'GROUP_FUND') {
+        splitType = ExpenseSplitType.SHARES;
+        dto.splitType = ExpenseSplitType.SHARES;
+        dto.splits = [];
+      }
+
+      if (!dto.splits && !oldSplits?.length) {
         oldSplits = await this.expensesRepository.findSplitsByExpenseId(id);
       }
 
-      if (splitType === ExpenseSplitType.SHARES && !dto.splits?.length && !oldSplits?.length) {
-        const participants = group.members.map((m) => ({ userId: m.userId, shares: 1 }));
-        splits = ExpenseSplitter.split(total, participants, splitType, allowedUserIds);
+      let participants: { userId: string; amount?: number; shares?: number }[];
+
+      if (dto.splits && dto.splits.length > 0) {
+        participants = dto.splits;
+      } else if (dto.splits && dto.splits.length === 0 && splitType === ExpenseSplitType.SHARES) {
+        participants = group.members.map((m) => ({ userId: m.userId, shares: 1 }));
       } else {
-        const participants =
-          dto.splits ??
-          oldSplits.map((s) => ({
-            userId: s.userId!,
-            amount: Number(s.amount),
-            shares: s.shares ?? undefined,
-          }));
-        splits = ExpenseSplitter.split(total, participants, splitType, allowedUserIds);
+        participants = oldSplits.map((s) => ({
+          userId: s.userId!,
+          amount: Number(s.amount),
+          shares: s.shares ?? undefined,
+        }));
       }
+
+      splits = ExpenseSplitter.split(total, participants, splitType, allowedUserIds);
     }
 
     const updatedExpense = await this.expensesRepository.update(
@@ -229,7 +276,7 @@ export class ExpensesService {
 
   async analyzeReceipt(file: Express.Multer.File) {
     if (!file) {
-      throw new Error('No receipt image provided');
+      throw new BusinessRuleError('No receipt image provided');
     }
 
     const prompt = `
@@ -242,26 +289,49 @@ export class ExpensesService {
       Return the result ONLY as a raw JSON object with the keys: amount, date, merchant, category. Do not include markdown code blocks.
     `;
 
+    let result: { amount: number; date: string; merchant: string; category: string };
     try {
-      const result = await this.geminiService.analyzeImageWithPrompt<{
+      result = await this.geminiService.analyzeImageWithPrompt<{
         amount: number;
         date: string;
         merchant: string;
         category: string;
       }>(file.buffer, file.mimetype, prompt);
-
-      const categories = await this.getCategories();
-      const matchedCategory = categories.find(
-        (c) => c.name.toLowerCase() === result.category.toLowerCase(),
-      );
-
-      return {
-        ...result,
-        categoryId: matchedCategory?.id,
-      };
     } catch (error) {
-      this.logger.error('Failed to analyze receipt', error);
-      throw new Error('Failed to analyze receipt image');
+      this.logger.error('Gemini receipt analysis failed', error);
+      throw new BusinessRuleError('Failed to analyze receipt image');
     }
+
+    const [categories, upload] = await Promise.all([
+      this.getCategories(),
+      this.uploadReceiptEvidence(file).catch((e) => {
+        this.logger.warn(`Receipt upload failed, returning analysis only: ${e.message}`);
+        return { receiptUrl: undefined };
+      }),
+    ]);
+
+    return {
+      ...result,
+      categoryId: categories.find((c) => c.name.toLowerCase() === result.category.toLowerCase())
+        ?.id,
+      receiptUrl: upload.receiptUrl,
+    };
+  }
+
+  async uploadReceiptEvidence(file: Express.Multer.File) {
+    if (!file) {
+      throw new BusinessRuleError('No receipt image provided');
+    }
+
+    const ext = (file.originalname.split('.').pop() || 'jpg')
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '');
+
+    const uploadResponse = await this.storage.upload({
+      key: `receipts/${randomUUID()}.${ext}`,
+      buffer: file.buffer,
+      mimeType: file.mimetype,
+    });
+    return { receiptUrl: uploadResponse.url };
   }
 }

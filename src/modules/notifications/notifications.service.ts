@@ -47,6 +47,10 @@ export class NotificationsService {
     return this.notificationsRepository.getUnreadCount(userId);
   }
 
+  async updateDeviceToken(userId: string, fcmToken: string) {
+    return this.notificationsRepository.updateDeviceToken(userId, fcmToken);
+  }
+
   async sendToUser(data: {
     userId: string;
     groupId?: string;
@@ -95,15 +99,15 @@ export class NotificationsService {
   }
 
   @OnEvent(SETTLEMENT_EVENTS.COMPLETED)
-  async onSettlementCompleted(event: unknown) {
+  async onSettlementCompleted(event: {
+    toUserId: string;
+    fromUserId: string;
+    groupId: string;
+    amount: number;
+    currency: string;
+  }) {
     try {
-      const settlement = event as {
-        toUserId: string;
-        fromUserId: string;
-        groupId: string;
-        amount: number;
-        currency: string;
-      };
+      const settlement = event;
       await this.sendToUser({
         userId: settlement.fromUserId,
         groupId: settlement.groupId,
@@ -114,6 +118,34 @@ export class NotificationsService {
     } catch (error) {
       this.logger.error(
         `Failed to handle SETTLEMENT_EVENTS.COMPLETED: ${(error as Error).message}`,
+        (error as Error).stack,
+      );
+    }
+  }
+
+  @OnEvent(SETTLEMENT_EVENTS.REMINDED)
+  async onSettlementReminded(event: {
+    groupId: string;
+    fromUserId: string;
+    targetUserId: string;
+    amount: number;
+    currency: string;
+    fromUserName: string;
+    groupName: string;
+  }) {
+    try {
+      const reminder = event;
+      await this.sendToUser({
+        userId: reminder.targetUserId,
+        groupId: reminder.groupId,
+        type: NotificationType.SETTLEMENT_REMINDER,
+        title: 'Settlement Reminder',
+        body: `${reminder.fromUserName} reminded you to settle ${reminder.currency} ${reminder.amount.toLocaleString()} in the group ${reminder.groupName}`,
+        payload: { groupId: reminder.groupId, fromUserId: reminder.fromUserId, kind: 'REMINDER' },
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to handle SETTLEMENT_EVENTS.REMINDED: ${(error as Error).message}`,
         (error as Error).stack,
       );
     }
