@@ -189,23 +189,25 @@ export class ExpensesService {
         dto.splits = [];
       }
 
-      if (!dto.splits?.length) {
+      if (!dto.splits && !oldSplits?.length) {
         oldSplits = await this.expensesRepository.findSplitsByExpenseId(id);
       }
 
-      if (splitType === ExpenseSplitType.SHARES && !dto.splits?.length && !oldSplits?.length) {
-        const participants = group.members.map((m) => ({ userId: m.userId, shares: 1 }));
-        splits = ExpenseSplitter.split(total, participants, splitType, allowedUserIds);
+      let participants: { userId: string; amount?: number; shares?: number }[];
+
+      if (dto.splits && dto.splits.length > 0) {
+        participants = dto.splits;
+      } else if (dto.splits && dto.splits.length === 0 && splitType === ExpenseSplitType.SHARES) {
+        participants = group.members.map((m) => ({ userId: m.userId, shares: 1 }));
       } else {
-        const participants =
-          dto.splits ??
-          oldSplits.map((s) => ({
-            userId: s.userId!,
-            amount: Number(s.amount),
-            shares: s.shares ?? undefined,
-          }));
-        splits = ExpenseSplitter.split(total, participants, splitType, allowedUserIds);
+        participants = oldSplits.map((s) => ({
+          userId: s.userId!,
+          amount: Number(s.amount),
+          shares: s.shares ?? undefined,
+        }));
       }
+
+      splits = ExpenseSplitter.split(total, participants, splitType, allowedUserIds);
     }
 
     const updatedExpense = await this.expensesRepository.update(

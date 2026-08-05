@@ -55,17 +55,31 @@ export class SettlementsRepository {
   }
 
   async complete(id: string) {
-    return this.prisma.settlement.update({
-      where: { id },
+    const { count } = await this.prisma.settlement.updateMany({
+      where: { id, status: SettlementStatus.PENDING },
       data: { status: SettlementStatus.COMPLETED, settledAt: new Date() },
     });
+
+    if (count === 0) {
+      throw new Error('Settlement not found or already processed');
+    }
+
+    const updated = await this.findById(id);
+    return updated!;
   }
 
   async cancel(id: string) {
-    return this.prisma.settlement.update({
-      where: { id },
+    const { count } = await this.prisma.settlement.updateMany({
+      where: { id, status: SettlementStatus.PENDING },
       data: { status: SettlementStatus.CANCELLED },
     });
+
+    if (count === 0) {
+      throw new Error('Settlement not found or already processed');
+    }
+
+    const updated = await this.findById(id);
+    return updated!;
   }
 
   async updateEvidence(id: string, evidenceUrl: string) {
