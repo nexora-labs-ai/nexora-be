@@ -144,6 +144,9 @@ export class SettlementsService {
   async completeSettlement(id: string, requestingUserId: string) {
     const settlement = await this.settlementsRepository.findById(id);
     if (!settlement) throw new NotFoundError('Settlement', id);
+    if (settlement.status !== 'PENDING') {
+      throw new ForbiddenError(`Cannot complete a settlement that is already ${settlement.status}`);
+    }
 
     // Only the recipient (toUser) can confirm receipt
     if (settlement.toUserId !== requestingUserId) {
@@ -162,6 +165,9 @@ export class SettlementsService {
   async cancelSettlement(id: string, requestingUserId: string) {
     const settlement = await this.settlementsRepository.findById(id);
     if (!settlement) throw new NotFoundError('Settlement', id);
+    if (settlement.status !== 'PENDING') {
+      throw new ForbiddenError(`Cannot cancel a settlement that is already ${settlement.status}`);
+    }
 
     if (settlement.fromUserId !== requestingUserId && settlement.toUserId !== requestingUserId) {
       throw new ForbiddenError('Only the payer or payee can cancel/reject a settlement');
